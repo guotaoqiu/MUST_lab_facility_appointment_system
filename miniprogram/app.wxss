@@ -1,0 +1,65 @@
+/* Colours follow the MUST logo: university blue with a touch of gold. */
+page {
+  --must-blue: #006cba;
+  --must-blue-dark: #00579a;
+  --must-blue-soft: #e8f1fa;
+  --must-blue-line: #b8d3ec;
+  --must-gold: #ffe409;
+  --must-gold-deep: #a68b00;
+  --must-gold-soft: #fff7c2;
+  --text: #1d2733;
+  --text-2: #5c6875;
+  --text-3: #98a2ae;
+  --line: #e5e9ef;
+  --bg: #f4f6f9;
+  --danger: #d14343;
+
+  background: var(--bg);
+  color: var(--text);
+  font-size: 28rpx;
+  line-height: 1.5;
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang TC', 'PingFang SC', 'Helvetica Neue', 'Microsoft JhengHei', sans-serif;
+}
+
+/* Buttons are views so they look the same on every platform. */
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 88rpx;
+  padding: 0 32rpx;
+  border-radius: 12rpx;
+  font-size: 30rpx;
+  font-weight: 600;
+  box-sizing: border-box;
+}
+
+.btn-primary {
+  background: var(--must-blue);
+  color: #fff;
+}
+
+.btn-primary.btn-pressed {
+  background: var(--must-blue-dark);
+}
+
+.btn-primary.btn-disabled {
+  background: #9fc3e3;
+}
+
+.btn-plain {
+  background: #fff;
+  color: var(--text);
+  border: 1rpx solid var(--line);
+}
+
+.btn-danger {
+  background: #fff;
+  color: var(--danger);
+  border: 1rpx solid #efc4c4;
+}
+
+.btn-plain.btn-pressed,
+.btn-danger.btn-pressed {
+  background: #f2f4f7;
+}

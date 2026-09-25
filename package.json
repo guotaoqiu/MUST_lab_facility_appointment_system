@@ -1,0 +1,24 @@
+{
+  "name": "must-lab-booking",
+  "version": "1.0.0",
+  "private": true,
+  "description": "WeChat mini program for booking instruments of the MUST Sustainable Building Materials Laboratory",
+  "scripts": {
+    "sync": "node scripts/sync.js",
+    "test": "jest"
+  },
+  "jest": {
+    "testEnvironment": "jsdom",
+    "testMatch": [
+      "<rootDir>/tests/**/*.test.js"
+    ],
+    "moduleNameMapper": {
+      "^\\./render/diff$": "<rootDir>/tests/support/j-component-diff.js"
+    }
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
+    "miniprogram-simulate": "^1.6.2"
+  }
+}

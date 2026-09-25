@@ -1,0 +1,93 @@
+page {
+  background: #fff;
+}
+
+.home {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 0 56rpx calc(80rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+}
+
+.top {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 16rpx;
+}
+
+.hero {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding-bottom: 40rpx;
+  text-align: center;
+}
+
+.logo {
+  width: 560rpx;
+}
+
+.rule {
+  width: 72rpx;
+  height: 6rpx;
+  margin: 64rpx 0 40rpx;
+  border-radius: 3rpx;
+  background: var(--must-gold);
+}
+
+.lab {
+  font-size: 44rpx;
+  line-height: 1.35;
+  font-weight: 600;
+  letter-spacing: 2rpx;
+  color: var(--must-blue);
+}
+
+.lab-alt {
+  margin-top: 12rpx;
+  font-size: 26rpx;
+  color: var(--text-2);
+}
+
+.entry {
+  display: flex;
+  align-items: center;
+  padding: 36rpx 40rpx;
+  border-radius: 20rpx;
+  background: var(--must-blue);
+  box-shadow: 0 12rpx 32rpx rgba(0, 108, 186, 0.25);
+}
+
+.entry-pressed {
+  background: var(--must-blue-dark);
+}
+
+.entry-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.entry-title {
+  font-size: 34rpx;
+  font-weight: 600;
+  color: #fff;
+}
+
+.entry-sub {
+  margin-top: 6rpx;
+  font-size: 24rpx;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.entry-arrow {
+  width: 20rpx;
+  height: 20rpx;
+  margin-left: 24rpx;
+  border-top: 4rpx solid var(--must-gold);
+  border-right: 4rpx solid var(--must-gold);
+  transform: rotate(45deg);
+}

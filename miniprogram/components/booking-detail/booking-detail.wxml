@@ -1,0 +1,42 @@
+<view class="mask {{show ? 'mask-show' : ''}}" bindtap="onClose" catchtouchmove="noop"></view>
+
+<view class="sheet {{show ? 'sheet-show' : ''}}" catchtouchmove="noop">
+  <view class="head">
+    <text class="title">{{t.bookingDetail}}</text>
+    <text wx:if="{{view.mine}}" class="tag">{{t.mineTag}}</text>
+  </view>
+
+  <view class="rows">
+    <view class="row">
+      <text class="key">{{t.instrument}}</text>
+      <text class="value">{{view.instrumentName}}</text>
+    </view>
+    <view class="row">
+      <text class="key">{{t.date}}</text>
+      <text class="value">{{view.dateText}}</text>
+    </view>
+    <view class="row">
+      <text class="key">{{t.time}}</text>
+      <text class="value">{{view.timeText}}</text>
+    </view>
+    <view class="row">
+      <text class="key">{{t.bookedBy}}</text>
+      <text class="value">{{view.name}}</text>
+    </view>
+    <view class="row">
+      <text class="key">{{t.purpose}}</text>
+      <text class="value">{{view.purpose}}</text>
+    </view>
+  </view>
+
+  <view class="actions">
+    <view
+      wx:if="{{view.canCancel}}"
+      class="btn btn-danger action"
+      hover-class="btn-pressed"
+      bindtap="onCancel"
+      aria-role="button"
+    >{{t.cancelBooking}}</view>
+    <view class="btn btn-plain action" hover-class="btn-pressed" bindtap="onClose" aria-role="button">{{t.close}}</view>
+  </view>
+</view>

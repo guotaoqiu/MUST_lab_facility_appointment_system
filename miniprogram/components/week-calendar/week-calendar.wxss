@@ -1,0 +1,185 @@
+/* The time column is 80rpx wide; the page's day header uses the same gutter. */
+.cal {
+  display: flex;
+  padding: 16rpx 16rpx 24rpx 0;
+  background: #fff;
+}
+
+.times {
+  position: relative;
+  flex: 0 0 80rpx;
+}
+
+.time {
+  position: absolute;
+  right: 12rpx;
+  font-size: 20rpx;
+  line-height: 1;
+  color: var(--text-3);
+  transform: translateY(-50%);
+}
+
+.cols {
+  position: relative;
+  flex: 1;
+  display: flex;
+  border-bottom: 1rpx solid var(--line);
+}
+
+.col {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  border-left: 1rpx solid var(--line);
+}
+
+.col:last-child {
+  border-right: 1rpx solid var(--line);
+}
+
+.col-today {
+  background: #f6faff;
+}
+
+.cell {
+  height: 48rpx;
+  box-sizing: border-box;
+  border-top: 1rpx dashed #eef1f5;
+}
+
+.cell-hour {
+  border-top: 1rpx solid var(--line);
+}
+
+.past {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: rgba(233, 237, 242, 0.75);
+}
+
+.block {
+  position: absolute;
+  left: 4rpx;
+  right: 4rpx;
+  display: flex;
+  flex-direction: column;
+  padding: 4rpx 6rpx 4rpx 8rpx;
+  border-left: 6rpx solid var(--must-blue);
+  border-radius: 6rpx;
+  background: var(--must-blue-soft);
+  box-sizing: border-box;
+  overflow: hidden;
+  z-index: 2;
+}
+
+.block-name {
+  font-size: 20rpx;
+  line-height: 26rpx;
+  font-weight: 600;
+  color: #0b3a66;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.block-purpose {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 18rpx;
+  line-height: 24rpx;
+  color: #45637f;
+  overflow-wrap: break-word;
+}
+
+.block-mine {
+  border-left-color: #d9bb00;
+  background: var(--must-gold-soft);
+}
+
+.block-mine .block-name {
+  color: #5a4b00;
+}
+
+.block-mine .block-purpose {
+  color: #76692a;
+}
+
+.block-past {
+  opacity: 0.55;
+}
+
+.now {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2rpx;
+  background: var(--danger);
+  z-index: 3;
+}
+
+.now::before {
+  content: '';
+  position: absolute;
+  left: -6rpx;
+  top: -5rpx;
+  width: 12rpx;
+  height: 12rpx;
+  border-radius: 50%;
+  background: var(--danger);
+}
+
+.sel {
+  position: absolute;
+  left: 2rpx;
+  right: 2rpx;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 12rpx 8rpx 8rpx;
+  border-radius: 8rpx;
+  background: var(--must-blue);
+  box-shadow: 0 6rpx 16rpx rgba(0, 108, 186, 0.35);
+  box-sizing: border-box;
+  z-index: 5;
+}
+
+.sel-time {
+  font-size: 20rpx;
+  line-height: 26rpx;
+  font-weight: 600;
+  color: #fff;
+}
+
+/* Large invisible touch areas around the two small dots. */
+.handle {
+  position: absolute;
+  width: 60rpx;
+  height: 60rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 6;
+}
+
+.handle-top {
+  top: -30rpx;
+  left: -14rpx;
+}
+
+.handle-bottom {
+  bottom: -30rpx;
+  right: -14rpx;
+}
+
+.dot {
+  width: 24rpx;
+  height: 24rpx;
+  border-radius: 50%;
+  background: #fff;
+  border: 5rpx solid var(--must-blue);
+  box-sizing: border-box;
+  box-shadow: 0 2rpx 6rpx rgba(0, 0, 0, 0.2);
+}

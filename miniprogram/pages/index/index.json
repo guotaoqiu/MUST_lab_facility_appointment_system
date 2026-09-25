@@ -1,0 +1,5 @@
+{
+  "usingComponents": {
+    "lang-switch": "/components/lang-switch/lang-switch"
+  }
+}

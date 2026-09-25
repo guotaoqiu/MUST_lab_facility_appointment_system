@@ -1,0 +1,274 @@
+// End-to-end flows through the booking and confirm pages in demo mode (no cloud
+// environment), rendered with miniprogram-simulate.
+// (The home page has its own file: a test file can load a shared child component
+// such as lang-switch for only one page.)
+const { useFixedNow, installWx, render, flush, text } = require('./support/harness')
+
+useFixedNow() // Friday 25 Sep 2026, 10:40 in Macau
+
+const i18n = require('../miniprogram/utils/i18n')
+const service = require('../miniprogram/services/booking')
+
+let w
+let pages = []
+beforeEach(() => {
+  w = installWx()
+  i18n.setLang('zh')
+  pages = []
+})
+afterEach(() => pages.forEach((p) => p.instance.onUnload && p.instance.onUnload()))
+
+async function openBooking(query = {}) {
+  const page = render('pages/booking/booking')
+  pages.push(page)
+  page.instance.onLoad(query)
+  page.instance.onShow()
+  await flush()
+  return page
+}
+
+async function openConfirm(query) {
+  const page = render('pages/confirm/confirm')
+  page.instance.onLoad(query)
+  page.instance.onShow()
+  await flush()
+  return page
+}
+
+const drawer = (page) => page.querySelector('#drawer')
+const calendar = (page) => page.querySelector('#calendar')
+
+async function pick(page, id) {
+  drawer(page).querySelectorAll('.item').find((i) => i.dom.dataset.id === id).dispatchEvent('tap')
+  await flush()
+  await flush()
+}
+
+async function tapCell(page, col, min) {
+  calendar(page)
+    .querySelectorAll('.cell')
+    .find((c) => Number(c.dom.dataset.col) === col && Number(c.dom.dataset.min) === min)
+    .dispatchEvent('tap')
+  await flush()
+}
+
+describe('booking page', () => {
+  test('opens with the side menu listing all instruments', async () => {
+    const page = await openBooking()
+    expect(page.instance.data.drawerOpen).toBe(true)
+    expect(drawer(page).querySelectorAll('.item')).toHaveLength(23)
+    expect(text(drawer(page))).toContain('共 23 台儀器')
+    expect(text(page)).toContain('演示模式')
+    expect(text(page)).toContain('請先從側邊欄選擇儀器')
+    expect(w.titles).toContain('儀器預約')
+  })
+
+  test('search matches Chinese, English, model and location', async () => {
+    const page = await openBooking()
+    const d = drawer(page)
+    const search = async (keyword) => {
+      d.instance.onInput({ detail: { value: keyword } })
+      await flush()
+      return d.querySelectorAll('.item').map((i) => i.dom.dataset.id)
+    }
+    expect(await search('離心')).toEqual(['centrifuge'])
+    expect(await search('CENTRI')).toEqual(['centrifuge'])
+    expect(await search('xqm')).toEqual(['ball-mill'])
+    expect(await search('ITC-81')).toEqual(['potentiostat'])
+    expect(await search('zzz')).toEqual([])
+    expect(text(d)).toContain('沒有符合的儀器')
+  })
+
+  test('picking an instrument shows its week with the bookings', async () => {
+    const page = await openBooking()
+    await pick(page, 'thermal-imager')
+    expect(page.instance.data.drawerOpen).toBe(false)
+    expect(JSON.parse(w.storage.get('lastInstrument'))).toBe('thermal-imager')
+    expect(text(page)).toContain('紅外線熱成像儀')
+    expect(page.instance.data.days.map((d) => d.dayNum)).toEqual([21, 22, 23, 24, 25, 26, 27])
+    expect(page.instance.data.days[4].isToday).toBe(true)
+    const names = calendar(page).querySelectorAll('.block-name').map((n) => n.dom.textContent)
+    expect(names).toEqual(['陳大文', 'Li Wei'])
+
+    page.querySelectorAll('.week')[1].dispatchEvent('tap')
+    await flush()
+    expect(page.instance.data.days[0].date).toBe('2026-09-28')
+    expect(calendar(page).querySelectorAll('.block-name').map((n) => n.dom.textContent)).toEqual(['黃嘉欣'])
+  })
+
+  test('select a slot, see it in the bottom bar and go to the confirmation', async () => {
+    const page = await openBooking()
+    await pick(page, 'thermal-imager')
+    expect(text(page.querySelector('.bar'))).toContain('點擊空白格子選擇時間')
+
+    await tapCell(page, 5, 600) // Saturday 10:00
+    expect(text(page.querySelector('.bar'))).toContain('9月26日（週六）')
+    expect(text(page.querySelector('.bar'))).toContain('10:00 – 10:30 · 30 分鐘')
+
+    page.querySelector('.bar-book').dispatchEvent('tap')
+    await flush()
+    expect(w.navigateTo).toEqual(['/pages/confirm/confirm?id=thermal-imager&date=2026-09-26&start=600&end=630'])
+
+    page.querySelector('.bar-clear').dispatchEvent('tap')
+    await flush()
+    expect(page.instance.data.selection).toBeNull()
+    expect(page.querySelector('.bar-book')).toBeUndefined()
+  })
+
+  test("someone else's booking shows details without a cancel button", async () => {
+    const page = await openBooking()
+    await pick(page, 'thermal-imager')
+    calendar(page).querySelectorAll('.block')[1].dispatchEvent('tap')
+    await flush()
+    const sheet = page.querySelector('#detail')
+    expect(text(sheet)).toContain('Li Wei')
+    expect(text(sheet)).toContain('Thermal imaging of heated mortar prisms')
+    expect(text(sheet)).toContain('9月23日（週三）')
+    expect(text(sheet)).toContain('14:00 – 16:30 · 2.5 小時')
+    expect(sheet.querySelector('.btn-danger')).toBeUndefined()
+    sheet.querySelector('.btn-plain').dispatchEvent('tap')
+    await flush()
+    expect(page.instance.data.detail).toBeNull()
+  })
+
+  test('switching to English relabels everything', async () => {
+    const page = await openBooking()
+    await pick(page, 'thermal-imager')
+    page.querySelector('#lang').querySelectorAll('.opt')[1].dispatchEvent('tap')
+    await flush()
+    expect(text(page)).toContain('Infrared Thermal Imager')
+    expect(text(page)).toContain('This Week')
+    expect(text(page)).toContain('21 – 27 Sep')
+    expect(page.instance.data.days[0].weekday).toBe('Mon')
+    expect(w.titles[w.titles.length - 1]).toBe('Instrument Booking')
+  })
+
+  test('coming back pre-selects the last instrument behind the side menu', async () => {
+    w.storage.set('lastInstrument', JSON.stringify('centrifuge'))
+    const page = await openBooking()
+    expect(page.instance.data.drawerOpen).toBe(true)
+    expect(page.instance.data.current.id).toBe('centrifuge')
+    expect(drawer(page).querySelector('.item-on').dom.dataset.id).toBe('centrifuge')
+    page.instance.closeDrawer()
+    await flush()
+    expect(calendar(page).querySelectorAll('.block-name').map((n) => n.dom.textContent)).toEqual(['吳思穎', 'Maria Santos'])
+  })
+})
+
+describe('confirm page', () => {
+  const query = { id: 'thermal-imager', date: '2026-09-26', start: '600', end: '690' }
+
+  test('summarises the booking and pre-fills the last name used', async () => {
+    w.storage.set('bookerName', JSON.stringify('陳大文'))
+    const page = await openConfirm(query)
+    expect(text(page)).toContain('紅外線熱成像儀')
+    expect(text(page)).toContain('9月26日（週六）')
+    expect(text(page)).toContain('10:00 – 11:30')
+    expect(text(page)).toContain('1.5 小時')
+    expect(page.instance.data.name).toBe('陳大文')
+    expect(w.titles).toContain('確認預約')
+  })
+
+  test('name and purpose are required', async () => {
+    const page = await openConfirm(query)
+    await page.instance.submit()
+    await flush()
+    expect(text(page)).toContain('請填寫姓名')
+    page.instance.onNameInput({ detail: { value: '陳大文' } })
+    await page.instance.submit()
+    await flush()
+    expect(text(page)).toContain('請說明用途')
+    expect((await service.list('thermal-imager')).bookings).toHaveLength(3) // only the samples
+  })
+
+  test('booking succeeds, remembers the name and returns to the calendar', async () => {
+    const timers = jest.spyOn(global, 'setTimeout')
+    const page = await openConfirm(query)
+    page.instance.onNameInput({ detail: { value: '  陳大文 ' } })
+    page.instance.onPurposeInput({ detail: { value: '混凝土試件溫度場' } })
+    expect(page.instance.data.purposeLength).toBe(8)
+    await page.instance.submit()
+
+    expect(w.toasts.map((t) => t.title)).toEqual(['預約成功'])
+    expect(JSON.parse(w.storage.get('bookerName'))).toBe('陳大文')
+    const back = timers.mock.calls.find((c) => c[1] === 1500)
+    expect(w.navigateBack).toBe(0)
+    back[0]()
+    expect(w.navigateBack).toBe(1)
+    timers.mockRestore()
+
+    // Pressing again while leaving does nothing.
+    await page.instance.submit()
+    expect(w.toasts).toHaveLength(1)
+
+    const list = await service.list('thermal-imager')
+    expect(list.bookings.find((b) => b.mine)).toMatchObject({ date: '2026-09-26', startMin: 600, endMin: 690, name: '陳大文' })
+  })
+
+  test('a slot taken in the meantime sends the user back to choose again', async () => {
+    await service.create({ instrumentId: 'thermal-imager', date: '2026-09-26', startMin: 630, endMin: 660, name: 'X', purpose: 'Y' })
+    const page = await openConfirm(query)
+    page.instance.onNameInput({ detail: { value: '陳大文' } })
+    page.instance.onPurposeInput({ detail: { value: '測試' } })
+    await page.instance.submit()
+    expect(w.modals[0].content).toBe('該時段剛被其他人預約，請重新選擇')
+    expect(w.navigateBack).toBe(1)
+    expect(page.instance.data.submitting).toBe(false)
+  })
+
+  test('a broken link shows an error and goes back', async () => {
+    await openConfirm({ id: 'nope', date: '2026-09-26', start: '600', end: '630' })
+    expect(w.modals).toHaveLength(1)
+    expect(w.navigateBack).toBe(1)
+  })
+})
+
+describe('full flow', () => {
+  test('book, see it as mine, cancel it', async () => {
+    const booking = await openBooking()
+    await pick(booking, 'centrifuge')
+    await tapCell(booking, 5, 780) // Saturday 13:00
+    booking.querySelector('.bar-book').dispatchEvent('tap')
+    await flush()
+    const url = w.navigateTo[0]
+    const params = Object.fromEntries(new URLSearchParams(url.split('?')[1]))
+
+    const confirm = await openConfirm(params)
+    confirm.instance.onNameInput({ detail: { value: 'Maria' } })
+    confirm.instance.onPurposeInput({ detail: { value: 'Centrifuge cement paste' } })
+    await confirm.instance.submit()
+
+    // Back on the calendar.
+    booking.instance.onShow()
+    await flush()
+    await flush()
+    expect(booking.instance.data.selection).toBeNull()
+    const mine = calendar(booking).querySelector('.block-mine')
+    expect(mine).toBeTruthy()
+    expect(text(mine)).toContain('Maria')
+
+    mine.dispatchEvent('tap')
+    await flush()
+    const sheet = booking.querySelector('#detail')
+    expect(text(sheet)).toContain('我的')
+    sheet.querySelector('.btn-danger').dispatchEvent('tap')
+    await flush()
+    await flush()
+    await flush()
+    expect(w.modals[0]).toMatchObject({ title: '取消預約', confirmText: '取消預約', cancelText: '保留' })
+    expect(w.toasts.map((t) => t.title)).toContain('已取消')
+    expect(calendar(booking).querySelector('.block-mine')).toBeUndefined()
+  })
+
+  test('keeping the booking in the cancel dialog changes nothing', async () => {
+    await service.create({ instrumentId: 'centrifuge', date: '2026-09-26', startMin: 780, endMin: 840, name: 'Maria', purpose: 'Y' })
+    const booking = await openBooking()
+    await pick(booking, 'centrifuge')
+    calendar(booking).querySelector('.block-mine').dispatchEvent('tap')
+    await flush()
+    w.modalAnswer = false
+    booking.querySelector('#detail').querySelector('.btn-danger').dispatchEvent('tap')
+    await flush()
+    expect(calendar(booking).querySelector('.block-mine')).toBeTruthy()
+  })
+})

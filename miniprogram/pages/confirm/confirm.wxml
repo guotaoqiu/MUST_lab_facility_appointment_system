@@ -1,0 +1,63 @@
+<view class="page">
+  <view class="card summary">
+    <view class="summary-head">
+      <image class="summary-thumb" src="{{summary.photo}}" mode="aspectFill"></image>
+      <view class="summary-title">
+        <text class="summary-name">{{summary.instrument}}</text>
+        <text wx:if="{{summary.meta}}" class="summary-meta">{{summary.meta}}</text>
+      </view>
+    </view>
+    <view class="summary-row">
+      <text class="key">{{t.date}}</text>
+      <text class="value">{{summary.date}}</text>
+    </view>
+    <view class="summary-row">
+      <text class="key">{{t.time}}</text>
+      <text class="value value-strong">{{summary.time}}</text>
+    </view>
+    <view class="summary-row">
+      <text class="key">{{t.duration}}</text>
+      <text class="value">{{summary.duration}}</text>
+    </view>
+  </view>
+
+  <view class="card form">
+    <view class="field">
+      <view class="label">{{t.name}}<text class="required">*</text></view>
+      <input
+        class="input {{errors.name ? 'input-error' : ''}}"
+        value="{{name}}"
+        maxlength="{{nameMax}}"
+        placeholder="{{t.namePlaceholder}}"
+        placeholder-class="placeholder"
+        confirm-type="next"
+        bindinput="onNameInput"
+      />
+      <text wx:if="{{errors.name}}" class="error">{{errors.name}}</text>
+    </view>
+
+    <view class="field">
+      <view class="label">{{t.purpose}}<text class="required">*</text></view>
+      <textarea
+        class="textarea {{errors.purpose ? 'input-error' : ''}}"
+        value="{{purpose}}"
+        maxlength="{{purposeMax}}"
+        placeholder="{{t.purposePlaceholder}}"
+        placeholder-class="placeholder"
+        disable-default-padding
+        bindinput="onPurposeInput"
+      ></textarea>
+      <view class="field-foot">
+        <text class="error">{{errors.purpose}}</text>
+        <text class="counter">{{purposeLength}}/{{purposeMax}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view
+    class="btn btn-primary submit {{submitting ? 'btn-disabled' : ''}}"
+    hover-class="{{submitting ? 'none' : 'btn-pressed'}}"
+    bindtap="submit"
+    aria-role="button"
+  >{{submitting ? t.submitting : t.submit}}</view>
+</view>

@@ -1,0 +1,104 @@
+<page-meta page-style="{{drawerOpen || detail ? 'overflow: hidden;' : ''}}"></page-meta>
+
+<view class="page">
+  <view class="top">
+    <view class="picker" hover-class="picker-pressed" bindtap="openDrawer" aria-role="button">
+      <view class="burger">
+        <view class="burger-line"></view>
+        <view class="burger-line"></view>
+        <view class="burger-line"></view>
+      </view>
+      <block wx:if="{{current}}">
+        <image class="picker-thumb" src="{{current.photo}}" mode="aspectFill"></image>
+        <view class="picker-text">
+          <text class="picker-name">{{current.name}}</text>
+          <text wx:if="{{current.meta}}" class="picker-meta">{{current.meta}}</text>
+        </view>
+      </block>
+      <text wx:else class="picker-placeholder">{{t.selectInstrument}}</text>
+    </view>
+    <lang-switch id="lang" lang="{{lang}}" bind:change="onLangChange"></lang-switch>
+  </view>
+
+  <view wx:if="{{demo}}" class="notice">{{t.demoMode}}</view>
+
+  <block wx:if="{{current}}">
+    <view class="sticky">
+      <view class="weeks">
+        <view
+          wx:for="{{weeks}}"
+          wx:key="start"
+          class="week {{index === weekIndex ? 'week-on' : ''}}"
+          data-index="{{index}}"
+          bindtap="switchWeek"
+          aria-role="tab"
+        >
+          <text class="week-title">{{item.title}}</text>
+          <text class="week-range">{{item.range}}</text>
+        </view>
+      </view>
+      <view class="dayhead">
+        <view class="dayhead-gutter"></view>
+        <view
+          wx:for="{{days}}"
+          wx:key="date"
+          class="day {{item.isToday ? 'day-today' : ''}} {{item.isPast ? 'day-past' : ''}}"
+        >
+          <text class="day-name">{{item.weekday}}</text>
+          <text class="day-num">{{item.dayNum}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view wx:if="{{loadError}}" class="error-bar">
+      <text>{{t.loadFailed}}</text>
+      <text class="error-retry" bindtap="retry">{{t.retry}}</text>
+    </view>
+
+    <week-calendar
+      id="calendar"
+      days="{{days}}"
+      bookings="{{weekBookings}}"
+      now-date="{{nowDate}}"
+      now-minutes="{{nowMinutes}}"
+      bind:selectionchange="onSelectionChange"
+      bind:selectiontap="goConfirm"
+      bind:bookingtap="onBookingTap"
+    ></week-calendar>
+
+    <view class="legend">
+      <view class="legend-item"><view class="swatch swatch-booked"></view><text>{{t.legendBooked}}</text></view>
+      <view class="legend-item"><view class="swatch swatch-mine"></view><text>{{t.legendMine}}</text></view>
+      <view class="legend-item"><view class="swatch swatch-selected"></view><text>{{t.legendSelected}}</text></view>
+    </view>
+
+    <view class="bar">
+      <block wx:if="{{selectionText}}">
+        <view class="bar-info">
+          <text class="bar-date">{{selectionText.date}}</text>
+          <text class="bar-time">{{selectionText.time}}</text>
+        </view>
+        <view class="bar-clear" hover-class="bar-clear-pressed" bindtap="clearSelection" aria-role="button">{{t.clear}}</view>
+        <view class="btn btn-primary bar-book" hover-class="btn-pressed" bindtap="goConfirm" aria-role="button">{{t.book}}</view>
+      </block>
+      <text wx:else class="bar-hint">{{t.tapHint}}</text>
+    </view>
+  </block>
+
+  <view wx:else class="empty">
+    <text class="empty-text">{{t.chooseHint}}</text>
+    <view class="btn btn-primary empty-btn" hover-class="btn-pressed" bindtap="openDrawer" aria-role="button">{{t.selectInstrument}}</view>
+  </view>
+</view>
+
+<instrument-drawer
+  id="drawer"
+  show="{{drawerOpen}}"
+  instruments="{{list}}"
+  current-id="{{current ? current.id : ''}}"
+  t="{{t}}"
+  bind:select="onPickInstrument"
+  bind:close="closeDrawer"
+></instrument-drawer>
+
+<booking-detail id="detail" booking="{{detail}}" t="{{t}}" bind:close="closeDetail" bind:cancel="onCancelBooking"></booking-detail>

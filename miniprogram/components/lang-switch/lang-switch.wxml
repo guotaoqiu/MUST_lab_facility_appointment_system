@@ -1,0 +1,4 @@
+<view class="switch">
+  <view class="opt {{lang === 'zh' ? 'on' : ''}}" data-lang="zh" bindtap="onTap" aria-role="button" aria-label="繁體中文">繁</view>
+  <view class="opt {{lang === 'en' ? 'on' : ''}}" data-lang="en" bindtap="onTap" aria-role="button" aria-label="English">EN</view>
+</view>

@@ -1,0 +1,24 @@
+.switch {
+  display: inline-flex;
+  padding: 4rpx;
+  border-radius: 999rpx;
+  background: rgba(0, 108, 186, 0.08);
+}
+
+.opt {
+  min-width: 64rpx;
+  height: 48rpx;
+  padding: 0 16rpx;
+  line-height: 48rpx;
+  text-align: center;
+  font-size: 24rpx;
+  font-weight: 600;
+  color: var(--must-blue);
+  border-radius: 999rpx;
+  box-sizing: border-box;
+}
+
+.opt.on {
+  background: var(--must-blue);
+  color: #fff;
+}

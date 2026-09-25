@@ -1,0 +1,42 @@
+<view class="mask {{show ? 'mask-show' : ''}}" bindtap="onClose" catchtouchmove="noop"></view>
+
+<view class="panel {{show ? 'panel-show' : ''}}">
+  <view class="head">
+    <text class="title">{{t.selectInstrument}}</text>
+    <text class="count">{{countText}}</text>
+  </view>
+
+  <view class="search">
+    <icon type="search" size="14" color="#98a2ae"></icon>
+    <input
+      class="search-input"
+      value="{{keyword}}"
+      placeholder="{{t.searchPlaceholder}}"
+      placeholder-class="search-placeholder"
+      confirm-type="search"
+      bindinput="onInput"
+    />
+    <view wx:if="{{keyword}}" class="search-clear" bindtap="onClear" aria-role="button">
+      <icon type="clear" size="14" color="#98a2ae"></icon>
+    </view>
+  </view>
+
+  <scroll-view class="list" scroll-y>
+    <view
+      wx:for="{{filtered}}"
+      wx:key="id"
+      class="item {{item.id === currentId ? 'item-on' : ''}}"
+      hover-class="item-pressed"
+      data-id="{{item.id}}"
+      bindtap="onSelect"
+      aria-role="button"
+    >
+      <image class="thumb" src="{{item.photo}}" mode="aspectFill" lazy-load></image>
+      <view class="info">
+        <text class="name">{{item.name}}</text>
+        <text wx:if="{{item.meta}}" class="meta">{{item.meta}}</text>
+      </view>
+    </view>
+    <view wx:if="{{!filtered.length}}" class="empty">{{t.noMatch}}</view>
+  </scroll-view>
+</view>

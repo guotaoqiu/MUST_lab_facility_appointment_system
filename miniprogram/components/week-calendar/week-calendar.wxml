@@ -1,0 +1,72 @@
+<view class="cal">
+  <view class="times" style="height: {{gridHeight}}rpx">
+    <text wx:for="{{hours}}" wx:key="text" class="time" style="top: {{item.top}}rpx">{{item.text}}</text>
+  </view>
+
+  <view class="cols" style="height: {{gridHeight}}rpx">
+    <view wx:for="{{columns}}" wx:for-item="col" wx:for-index="ci" wx:key="date" class="col {{col.isToday ? 'col-today' : ''}}">
+      <view
+        wx:for="{{rows}}"
+        wx:for-item="row"
+        wx:key="min"
+        class="cell {{row.hour ? 'cell-hour' : ''}}"
+        data-col="{{ci}}"
+        data-min="{{row.min}}"
+        bindtap="onCellTap"
+      ></view>
+
+      <view wx:if="{{col.pastHeight > 0}}" class="past" style="height: {{col.pastHeight}}rpx"></view>
+
+      <view
+        wx:for="{{col.blocks}}"
+        wx:for-item="b"
+        wx:key="id"
+        class="block {{b.mine ? 'block-mine' : ''}} {{b.past ? 'block-past' : ''}}"
+        style="top: {{b.top}}rpx; height: {{b.height}}rpx"
+        data-id="{{b.id}}"
+        catchtap="onBookingTap"
+        aria-role="button"
+      >
+        <text class="block-name">{{b.name}}</text>
+        <text wx:if="{{b.lines > 0}}" class="block-purpose" style="-webkit-line-clamp: {{b.lines}}">{{b.purpose}}</text>
+      </view>
+
+      <view wx:if="{{col.nowTop >= 0}}" class="now" style="top: {{col.nowTop}}rpx"></view>
+
+      <view
+        wx:if="{{sel && sel.col === ci}}"
+        class="sel"
+        style="top: {{sel.top}}rpx; height: {{sel.height}}rpx"
+        catchtap="onSelectionTap"
+        aria-role="button"
+      >
+        <block wx:if="{{sel.showText}}">
+          <text class="sel-time">{{sel.startText}}</text>
+          <text class="sel-time">{{sel.endText}}</text>
+        </block>
+        <view
+          class="handle handle-top"
+          data-edge="top"
+          catchtouchstart="onHandleStart"
+          catchtouchmove="onHandleMove"
+          catchtouchend="onHandleEnd"
+          catchtouchcancel="onHandleEnd"
+          catchtap="noop"
+        >
+          <view class="dot"></view>
+        </view>
+        <view
+          class="handle handle-bottom"
+          data-edge="bottom"
+          catchtouchstart="onHandleStart"
+          catchtouchmove="onHandleMove"
+          catchtouchend="onHandleEnd"
+          catchtouchcancel="onHandleEnd"
+          catchtap="noop"
+        >
+          <view class="dot"></view>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>
