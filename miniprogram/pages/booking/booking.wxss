@@ -60,13 +60,14 @@
 }
 
 .picker-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
   font-size: 30rpx;
-  line-height: 40rpx;
+  line-height: 38rpx;
   font-weight: 600;
   color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .picker-meta {
@@ -87,7 +88,7 @@
 .notice {
   padding: 12rpx 24rpx;
   font-size: 22rpx;
-  color: #6b5a00;
+  color: var(--must-gold-text);
   background: var(--must-gold-soft);
 }
 
@@ -190,16 +191,21 @@
   color: #fff;
 }
 
-.error-bar {
+.status {
   display: flex;
   justify-content: center;
   padding: 16rpx;
   font-size: 24rpx;
+  color: var(--text-2);
+  background: var(--bg);
+}
+
+.status-error {
   color: var(--danger);
   background: #fdf0f0;
 }
 
-.error-retry {
+.status-retry {
   margin-left: 16rpx;
   font-weight: 600;
   text-decoration: underline;
@@ -234,7 +240,7 @@
 
 .swatch-mine {
   background: var(--must-gold-soft);
-  border-left: 6rpx solid #d9bb00;
+  border-left: 6rpx solid var(--must-gold-line);
 }
 
 .swatch-selected {

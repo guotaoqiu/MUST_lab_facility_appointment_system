@@ -11,10 +11,7 @@
     "testEnvironment": "jsdom",
     "testMatch": [
       "<rootDir>/tests/**/*.test.js"
-    ],
-    "moduleNameMapper": {
-      "^\\./render/diff$": "<rootDir>/tests/support/j-component-diff.js"
-    }
+    ]
   },
   "devDependencies": {
     "jest": "^29.7.0",

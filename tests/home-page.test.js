@@ -26,8 +26,13 @@ describe('home page', () => {
     expect(JSON.parse(w.storage.get('lang'))).toBe('en')
 
     page.querySelector('.entry').dispatchEvent('tap')
+    page.querySelector('.entry').dispatchEvent('tap') // a quick double tap opens it once
     await flush()
     expect(w.navigateTo).toEqual(['/pages/booking/booking'])
+    page.instance.onShow()
+    page.querySelector('.entry').dispatchEvent('tap')
+    await flush()
+    expect(w.navigateTo).toHaveLength(2)
   })
 })
 

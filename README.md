@@ -2,9 +2,9 @@
 
 澳門科技大學可持續發展建材實驗室的微信小程序，用來預約實驗室儀器。介面支援**繁體中文**和 **English**，配色取自澳科大校徽（藍色＋金色）。
 
-| 首頁 | 選擇儀器 | 選擇時段 | 預約詳情 | 確認預約 |
-| --- | --- | --- | --- | --- |
-| ![首頁](docs/screenshots/home-zh.jpg) | ![側邊欄](docs/screenshots/booking-drawer-zh.jpg) | ![日曆](docs/screenshots/booking-selected-zh.jpg) | ![詳情](docs/screenshots/booking-detail-zh.jpg) | ![確認](docs/screenshots/confirm-zh.jpg) |
+| 首頁 | 選擇儀器 | 選擇時段 | 預約詳情 | 確認預約 | English |
+| --- | --- | --- | --- | --- | --- |
+| ![首頁](docs/screenshots/home-zh.jpg) | ![側邊欄](docs/screenshots/booking-drawer-zh.jpg) | ![日曆](docs/screenshots/booking-selected-zh.jpg) | ![詳情](docs/screenshots/booking-detail-zh.jpg) | ![確認](docs/screenshots/confirm-zh.jpg) | ![English](docs/screenshots/booking-selected-en.jpg) |
 
 （以上是測試工具渲染的預覽圖，實際效果以微信開發者工具為準。）
 
@@ -16,7 +16,7 @@
 - **預約**：點擊空白格子（每格 30 分鐘）選擇時間，拖動上下圓點調整時長 → 填寫姓名、用途 → 確定預約 → 提示「預約成功」後回到週曆。
 - **取消**：自己的預約（金色）可在詳情中取消；管理員可取消任何人的預約。
 - 已過去的時段顯示灰色，紅線表示現在時間；時間一律以澳門時間（UTC+8）計算。
-- 兩人同時預約同一時段時，由雲函數在數據庫交易中檢查，後提交的一方會收到「該時段剛被其他人預約」。
+- 兩人同時預約同一時段時，由雲函數在數據庫交易中檢查，後提交的一方會收到「該時段剛被其他人預約」；同時預約不同時段則都會成功。
 
 ## 快速開始（演示模式）
 
@@ -32,11 +32,14 @@
 
 1. 在 `project.config.json` 把 `appid` 改成實驗室小程序的 AppID。
 2. 開發者工具 →「雲開發」→ 開通，建立一個環境，複製**環境 ID**。
+   注意：雲開發是付費服務。開發階段可以用免費／體驗環境，但小程序發布後免費環境只保留一段短時間（以微信「雲開發 → 計費說明」及免費體驗活動公告為準），
+   請在到期前升級為付費套餐並開啟自動續費，否則預約功能會停止運作。
 3. 把環境 ID 填入 `miniprogram/config.js`：
    ```js
    cloudEnv: 'your-env-id',
    ```
 4. 在開發者工具左側右鍵 `cloudfunctions/booking` →「上傳並部署：雲端安裝依賴」。
+   （`cloudfunctions/booking/config.json` 把超時時間設為 10 秒；如控制台顯示的仍是 3 秒，可在雲函數的「版本與配置」中修改。）
 5. 雲開發控制台 →「數據庫」→ 新建集合 `schedules`（第一次預約時也會自動建立），
    權限設定選「自定義安全規則」並填入：
    ```json
@@ -47,6 +50,9 @@
    openid 可在數據庫 `schedules` 中管理員自己預約那一條的 `openid` 欄位找到。
 7. 上傳代碼、提交審核。小程序會收集用戶自行填寫的姓名和用途，請在公眾平台的「用戶隱私保護指引」中說明。
 
+任何打開小程序的微信用戶都可以預約，並看到預約人姓名和用途。`sitemap.json` 已設定不讓頁面內容被微信搜尋收錄；如只給實驗室成員使用，
+可在公眾平台的設定中關閉「允許被搜尋」，改為把小程序分享給成員。管理員可在預約詳情中取消任何人的預約。
+
 雲函數預設會用微信內容安全接口（`security.msgSecCheck`）檢查姓名和用途；如不需要，把 `settings.js` 裡的 `CONTENT_CHECK` 改為 `false`。
 
 ## 常見修改
@@ -56,8 +62,8 @@
 | 儀器清單、名稱、型號、地點 | `miniprogram/data/instruments.js`，照片放在 `miniprogram/images/instruments/<id>.jpg` |
 | 可預約時間（預設 08:00–22:00）、每格時長、姓名/用途字數上限 | `miniprogram/utils/booking-core.js` 頂部的常數 |
 | 介面文字 | `miniprogram/i18n/zh.js`、`miniprogram/i18n/en.js` |
-| 顏色 | `miniprogram/app.wxss` 頂部的顏色變量 |
-| 校徽圖片 | `miniprogram/images/must-logo.png`（目前由提供的截圖放大，換成高清版本效果更好） |
+| 顏色 | `miniprogram/app.wxss` 頂部的顏色變量；導航欄藍色另見 `pages/booking/booking.json`、`pages/confirm/confirm.json` 的 `navigationBarBackgroundColor`，取消對話框按鈕色見 `pages/booking/booking.js` 的 `confirmColor` |
+| 校徽圖片 | `miniprogram/images/must-logo.png`（目前由提供的截圖放大，略有模糊，建議換成學校提供的高清 PNG，四周留少量透明邊） |
 
 修改 `instruments.js` 或 `booking-core.js` 後，執行 `npm run sync`，再重新部署 `booking` 雲函數，雲函數才會使用新的儀器清單和規則。
 儀器的 `id` 會存進每條預約，已有的 `id` 請不要更改。
@@ -79,7 +85,8 @@
 }
 ```
 
-`startMin` / `endMin` 是當天的分鐘數（600 = 10:00）。把一天的預約放在同一份文件裡，雲函數才能在一個交易中檢查重疊並寫入。
+`startMin` / `endMin` 是當天的分鐘數（600 = 10:00）。把一天的預約放在同一份文件裡，雲函數才能在一個交易中檢查重疊並寫入；
+遇到交易衝突會自動重試。每次預約帶一個 `requestId`，網絡不穩重試時不會重複預約。
 
 ## 目錄
 
@@ -104,7 +111,7 @@ npm install
 npm test
 ```
 
-測試用 [miniprogram-simulate](https://github.com/wechat-miniprogram/miniprogram-simulate) 和微信官方 WXML 編譯器渲染頁面，覆蓋預約規則、雲函數（包括同時預約的情況）、週曆的點擊和拖動、以及從選擇儀器到預約、取消的完整流程。
+測試用 [miniprogram-simulate](https://github.com/wechat-miniprogram/miniprogram-simulate) 和微信官方 WXML 編譯器渲染頁面，覆蓋預約規則、雲函數（包括同時預約、交易衝突重試）、週曆的點擊、拖動和自動捲動、不同螢幕寬度下的對齊，以及從選擇儀器到預約、取消的完整流程。
 
 ## 備註
 

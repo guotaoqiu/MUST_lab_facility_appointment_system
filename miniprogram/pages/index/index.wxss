@@ -6,7 +6,7 @@ page {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  padding: 0 56rpx calc(80rpx + env(safe-area-inset-bottom));
+  padding: 0 56rpx env(safe-area-inset-bottom);
   box-sizing: border-box;
 }
 
@@ -16,18 +16,24 @@ page {
   padding-top: 16rpx;
 }
 
-.hero {
+/* Logo, lab name and the entry button form one group in the middle of the screen. */
+.center {
   flex: 1;
   display: flex;
   flex-direction: column;
-  align-items: center;
   justify-content: center;
-  padding-bottom: 40rpx;
+  padding-bottom: 80rpx;
+}
+
+.hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   text-align: center;
 }
 
 .logo {
-  width: 560rpx;
+  width: 520rpx;
 }
 
 .rule {
@@ -55,6 +61,7 @@ page {
 .entry {
   display: flex;
   align-items: center;
+  margin-top: 96rpx;
   padding: 36rpx 40rpx;
   border-radius: 20rpx;
   background: var(--must-blue);
@@ -80,7 +87,7 @@ page {
 .entry-sub {
   margin-top: 6rpx;
   font-size: 24rpx;
-  color: rgba(255, 255, 255, 0.75);
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .entry-arrow {

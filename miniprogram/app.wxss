@@ -7,9 +7,15 @@ page {
   --must-gold: #ffe409;
   --must-gold-deep: #a68b00;
   --must-gold-soft: #fff7c2;
+  --must-gold-line: #d9bb00;
+  --must-gold-border: #ecd65a;
+  --must-gold-text: #5a4b00;
+  --must-gold-text-2: #6f6224;
+  --block-text: #0b3a66;
+  --block-text-2: #45637f;
   --text: #1d2733;
   --text-2: #5c6875;
-  --text-3: #98a2ae;
+  --text-3: #66717e;
   --line: #e5e9ef;
   --bg: #f4f6f9;
   --danger: #d14343;

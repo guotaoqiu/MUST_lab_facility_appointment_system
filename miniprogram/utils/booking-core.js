@@ -188,9 +188,11 @@ function publicBooking(b, instrumentId, date, ctx, now) {
  * `ctx` supplies the environment:
  *   store.listDays(instrumentId, fromDate, toDate) -> Promise<day[]>
  *     day = { instrumentId, date, bookings: [...], cancelled: [...] }
- *   store.updateDay(instrumentId, date, mutate) -> Promise<outcome>
- *     Runs mutate(day) atomically. mutate returns { day } to save the day,
- *     or { error } to leave it untouched. Resolves to mutate's return value.
+ *   store.updateDay(instrumentId, date, mutate, { create }) -> Promise<outcome>
+ *     Runs mutate(day) atomically and resolves to its return value.
+ *     mutate returns { day, ... } to save the day, { error } to leave it
+ *     untouched, or an outcome without `day` when nothing needs saving.
+ *     With create: false a missing day document is not created.
  *   openid, isAdmin, nowMs, isInstrument(id), checkText(text) (optional)
  */
 async function handleAction(event, ctx) {
@@ -219,8 +221,9 @@ async function listAction(event, ctx) {
 
 async function createAction(event, ctx) {
   if (!ctx.openid) return fail('UNAUTHORIZED')
-  const { instrumentId } = event
+  const { instrumentId, requestId } = event
   if (!ctx.isInstrument(instrumentId)) return fail('BAD_INSTRUMENT')
+  if (requestId != null && !(typeof requestId === 'string' && /^[\w-]{1,64}$/.test(requestId))) return fail('BAD_REQUEST')
   const checked = validateBooking(event, ctx.nowMs)
   if (!checked.ok) return checked
   const v = checked.value
@@ -236,15 +239,19 @@ async function createAction(event, ctx) {
     openid: ctx.openid,
     createdAt: ctx.nowMs
   }
+  if (requestId) booking.requestId = requestId
   const outcome = await ctx.store.updateDay(instrumentId, v.date, (day) => {
+    // A retry of a request that already went through (e.g. its response was lost).
+    const earlier = requestId && day.bookings.find((b) => b.openid === ctx.openid && b.requestId === requestId)
+    if (earlier) return { booking: earlier }
     if (findConflict(day.bookings, v.startMin, v.endMin)) return { error: 'CONFLICT' }
     day.bookings.push(booking)
     day.bookings.sort((a, b) => a.startMin - b.startMin)
-    return { day }
+    return { day, booking }
   })
   if (outcome.error) return fail(outcome.error)
   const now = localNow(ctx.nowMs)
-  return { ok: true, booking: publicBooking(booking, instrumentId, v.date, ctx, now) }
+  return { ok: true, booking: publicBooking(outcome.booking, instrumentId, v.date, ctx, now) }
 }
 
 async function cancelAction(event, ctx) {
@@ -254,15 +261,21 @@ async function cancelAction(event, ctx) {
     return fail('BAD_REQUEST')
   }
   const now = localNow(ctx.nowMs)
-  const outcome = await ctx.store.updateDay(instrumentId, date, (day) => {
-    const target = day.bookings.find((b) => b.id === id)
-    if (!target) return { error: 'NOT_FOUND' }
-    if (target.openid !== ctx.openid && !ctx.isAdmin) return { error: 'FORBIDDEN' }
-    if (isPast(date, target.endMin, now)) return { error: 'ALREADY_ENDED' }
-    day.bookings = day.bookings.filter((b) => b.id !== id)
-    day.cancelled.push(Object.assign({}, target, { cancelledAt: ctx.nowMs, cancelledBy: ctx.openid }))
-    return { day }
-  })
+  if (date > bookingWindow(ctx.nowMs).lastDate) return fail('NOT_FOUND')
+  const outcome = await ctx.store.updateDay(
+    instrumentId,
+    date,
+    (day) => {
+      const target = day.bookings.find((b) => b.id === id)
+      if (!target) return { error: 'NOT_FOUND' }
+      if (target.openid !== ctx.openid && !ctx.isAdmin) return { error: 'FORBIDDEN' }
+      if (isPast(date, target.endMin, now)) return { error: 'ALREADY_ENDED' }
+      day.bookings = day.bookings.filter((b) => b.id !== id)
+      day.cancelled.push(Object.assign({}, target, { cancelledAt: ctx.nowMs, cancelledBy: ctx.openid }))
+      return { day }
+    },
+    { create: false }
+  )
   if (outcome.error) return fail(outcome.error)
   return { ok: true }
 }
@@ -291,6 +304,7 @@ module.exports = {
   cleanText,
   textLength,
   validateBooking,
+  makeId,
   normalizeDay,
   handleAction
 }

@@ -8,6 +8,13 @@ const NAME_KEY = 'bookerName'
 // After these errors the chosen slot is no longer usable: go back and pick again.
 const RESELECT_CODES = ['CONFLICT', 'IN_PAST', 'OUT_OF_RANGE', 'INVALID_TIME', 'INVALID_DATE', 'BAD_INSTRUMENT']
 
+function fieldError(value, max, prefix, lang) {
+  const text = core.cleanText(value)
+  if (!text) return i18n.errorMessage(prefix + '_REQUIRED', lang)
+  if (core.textLength(text) > max) return i18n.errorMessage(prefix + '_TOO_LONG', lang)
+  return ''
+}
+
 Component({
   data: {
     lang: 'zh',
@@ -28,10 +35,12 @@ Component({
       const instrument = instruments.find((i) => i.id === query.id)
       const startMin = Number(query.start)
       const endMin = Number(query.end)
+      // requestId lets the server recognise a retry of this same booking.
       this.request = instrument && core.isDateString(query.date) && startMin < endMin
-        ? { instrumentId: instrument.id, date: query.date, startMin, endMin }
+        ? { instrumentId: instrument.id, date: query.date, startMin, endMin, requestId: core.makeId(Date.now()) }
         : null
       this.instrument = instrument
+      this.left = false
 
       let name = ''
       try {
@@ -45,6 +54,12 @@ Component({
 
     onShow() {
       this.applyLang()
+    },
+
+    onUnload() {
+      // Never navigate on behalf of a page the user has already left.
+      this.left = true
+      clearTimeout(this.backTimer)
     },
 
     applyLang() {
@@ -83,11 +98,18 @@ Component({
       const lang = this.data.lang
       const payload = Object.assign({}, this.request, { name: this.data.name, purpose: this.data.purpose })
 
+      // Report both fields at once.
+      const errors = {
+        name: fieldError(payload.name, core.NAME_MAX, 'NAME', lang),
+        purpose: fieldError(payload.purpose, core.PURPOSE_MAX, 'PURPOSE', lang)
+      }
+      if (errors.name || errors.purpose) {
+        this.setData({ errors })
+        return
+      }
       const checked = core.validateBooking(payload, clock.now())
       if (!checked.ok) {
-        if (/^NAME_/.test(checked.code)) this.setData({ 'errors.name': i18n.errorMessage(checked.code, lang) })
-        else if (/^PURPOSE_/.test(checked.code)) this.setData({ 'errors.purpose': i18n.errorMessage(checked.code, lang) })
-        else this.showError(checked.code, RESELECT_CODES.indexOf(checked.code) !== -1)
+        this.showError(checked.code, RESELECT_CODES.indexOf(checked.code) !== -1)
         return
       }
 
@@ -99,7 +121,9 @@ Component({
         } catch (e) {}
         wx.showToast({ title: this.data.t.success, icon: 'success', duration: 1500, mask: true })
         // Stay "submitting" so the button cannot be pressed again before leaving.
-        setTimeout(() => wx.navigateBack(), 1500)
+        this.backTimer = setTimeout(() => {
+          if (!this.left) wx.navigateBack()
+        }, 1500)
         return
       }
       this.setData({ submitting: false })
@@ -114,7 +138,7 @@ Component({
         showCancel: false,
         confirmText: t.gotIt,
         success: () => {
-          if (goBack) wx.navigateBack()
+          if (goBack && !this.left) wx.navigateBack()
         }
       })
     }

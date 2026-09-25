@@ -1,4 +1,5 @@
-/* The time column is 80rpx wide; the page's day header uses the same gutter. */
+/* The time column is 80rpx wide; the page's day header uses the same gutter.
+   Vertical positions are set in px from JS (see week-calendar.js). */
 .cal {
   display: flex;
   padding: 16rpx 16rpx 24rpx 0;
@@ -15,7 +16,7 @@
   right: 12rpx;
   font-size: 20rpx;
   line-height: 1;
-  color: var(--text-3);
+  color: var(--text-2);
   transform: translateY(-50%);
 }
 
@@ -41,8 +42,11 @@
   background: #f6faff;
 }
 
+.cal-disabled .cols {
+  opacity: 0.4;
+}
+
 .cell {
-  height: 48rpx;
   box-sizing: border-box;
   border-top: 1rpx dashed #eef1f5;
 }
@@ -78,7 +82,7 @@
   font-size: 20rpx;
   line-height: 26rpx;
   font-weight: 600;
-  color: #0b3a66;
+  color: var(--block-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -90,21 +94,23 @@
   overflow: hidden;
   font-size: 18rpx;
   line-height: 24rpx;
-  color: #45637f;
-  overflow-wrap: break-word;
+  color: var(--block-text-2);
+  /* English wraps at spaces; a word wider than the column is clipped, not split. */
+  word-break: normal;
+  overflow-wrap: normal;
 }
 
 .block-mine {
-  border-left-color: #d9bb00;
+  border-left-color: var(--must-gold-line);
   background: var(--must-gold-soft);
 }
 
 .block-mine .block-name {
-  color: #5a4b00;
+  color: var(--must-gold-text);
 }
 
 .block-mine .block-purpose {
-  color: #76692a;
+  color: var(--must-gold-text-2);
 }
 
 .block-past {
@@ -153,11 +159,11 @@
   color: #fff;
 }
 
-/* Large invisible touch areas around the two small dots. */
+/* Invisible touch areas around the two dots, kept inside the day column. */
 .handle {
   position: absolute;
-  width: 60rpx;
-  height: 60rpx;
+  width: 56rpx;
+  height: 44rpx;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -165,13 +171,13 @@
 }
 
 .handle-top {
-  top: -30rpx;
-  left: -14rpx;
+  top: -22rpx;
+  left: 0;
 }
 
 .handle-bottom {
-  bottom: -30rpx;
-  right: -14rpx;
+  bottom: -22rpx;
+  right: 0;
 }
 
 .dot {

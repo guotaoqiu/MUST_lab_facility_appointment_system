@@ -50,9 +50,9 @@
   padding: 2rpx 14rpx;
   border-radius: 6rpx;
   font-size: 22rpx;
-  color: #5a4b00;
+  color: var(--must-gold-text);
   background: var(--must-gold-soft);
-  border: 1rpx solid #ecd65a;
+  border: 1rpx solid var(--must-gold-border);
 }
 
 .rows {

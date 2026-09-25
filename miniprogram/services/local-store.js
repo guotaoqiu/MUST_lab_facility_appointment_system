@@ -84,7 +84,7 @@ module.exports = {
   async updateDay(instrumentId, date, mutate) {
     const all = load()
     const outcome = mutate(readDay(all, instrumentId, date))
-    if (outcome.error) return outcome
+    if (outcome.error || !outcome.day) return outcome
     all[instrumentId + '_' + date] = {
       instrumentId,
       date,

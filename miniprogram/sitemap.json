@@ -1,7 +1,8 @@
 {
+  "desc": "Booking pages show members' names and purposes; keep them out of WeChat search.",
   "rules": [
     {
-      "action": "allow",
+      "action": "disallow",
       "page": "*"
     }
   ]

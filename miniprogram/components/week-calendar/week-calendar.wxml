@@ -1,28 +1,29 @@
-<view class="cal">
-  <view class="times" style="height: {{gridHeight}}rpx">
-    <text wx:for="{{hours}}" wx:key="text" class="time" style="top: {{item.top}}rpx">{{item.text}}</text>
+<view class="cal {{disabled ? 'cal-disabled' : ''}}">
+  <view class="times" style="height: {{gridHeight}}px">
+    <text wx:for="{{hours}}" wx:key="text" class="time" style="top: {{item.top}}px">{{item.text}}</text>
   </view>
 
-  <view class="cols" style="height: {{gridHeight}}rpx">
+  <view class="cols" style="height: {{gridHeight}}px">
     <view wx:for="{{columns}}" wx:for-item="col" wx:for-index="ci" wx:key="date" class="col {{col.isToday ? 'col-today' : ''}}">
       <view
         wx:for="{{rows}}"
         wx:for-item="row"
         wx:key="min"
         class="cell {{row.hour ? 'cell-hour' : ''}}"
+        style="height: {{slotPx}}px"
         data-col="{{ci}}"
         data-min="{{row.min}}"
         bindtap="onCellTap"
       ></view>
 
-      <view wx:if="{{col.pastHeight > 0}}" class="past" style="height: {{col.pastHeight}}rpx"></view>
+      <view wx:if="{{col.pastHeight > 0}}" class="past" style="height: {{col.pastHeight}}px"></view>
 
       <view
         wx:for="{{col.blocks}}"
         wx:for-item="b"
         wx:key="id"
         class="block {{b.mine ? 'block-mine' : ''}} {{b.past ? 'block-past' : ''}}"
-        style="top: {{b.top}}rpx; height: {{b.height}}rpx"
+        style="top: {{b.top}}px; height: {{b.height}}px"
         data-id="{{b.id}}"
         catchtap="onBookingTap"
         aria-role="button"
@@ -31,12 +32,12 @@
         <text wx:if="{{b.lines > 0}}" class="block-purpose" style="-webkit-line-clamp: {{b.lines}}">{{b.purpose}}</text>
       </view>
 
-      <view wx:if="{{col.nowTop >= 0}}" class="now" style="top: {{col.nowTop}}rpx"></view>
+      <view wx:if="{{col.nowTop >= 0}}" class="now" style="top: {{col.nowTop}}px"></view>
 
       <view
         wx:if="{{sel && sel.col === ci}}"
         class="sel"
-        style="top: {{sel.top}}rpx; height: {{sel.height}}rpx"
+        style="top: {{sel.top}}px; height: {{sel.height}}px"
         catchtap="onSelectionTap"
         aria-role="button"
       >

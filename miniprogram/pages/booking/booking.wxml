@@ -50,10 +50,11 @@
       </view>
     </view>
 
-    <view wx:if="{{loadError}}" class="error-bar">
+    <view wx:if="{{loadError}}" class="status status-error">
       <text>{{t.loadFailed}}</text>
-      <text class="error-retry" bindtap="retry">{{t.retry}}</text>
+      <text class="status-retry" bindtap="retry" aria-role="button">{{t.retry}}</text>
     </view>
+    <view wx:elif="{{!ready}}" class="status">{{t.loading}}</view>
 
     <week-calendar
       id="calendar"
@@ -61,6 +62,9 @@
       bookings="{{weekBookings}}"
       now-date="{{nowDate}}"
       now-minutes="{{nowMinutes}}"
+      disabled="{{!ready}}"
+      view-top="{{viewTop}}"
+      view-bottom="{{viewBottom}}"
       bind:selectionchange="onSelectionChange"
       bind:selectiontap="goConfirm"
       bind:bookingtap="onBookingTap"
@@ -102,3 +106,12 @@
 ></instrument-drawer>
 
 <booking-detail id="detail" booking="{{detail}}" t="{{t}}" bind:close="closeDetail" bind:cancel="onCancelBooking"></booking-detail>
+
+<!-- Invisible: makes the back key / swipe-back close the side menu or the sheet first. -->
+<page-container
+  show="{{drawerOpen || !!detail}}"
+  overlay="{{false}}"
+  duration="{{0}}"
+  custom-style="height: 0; overflow: hidden;"
+  bind:beforeleave="onOverlayBack"
+></page-container>

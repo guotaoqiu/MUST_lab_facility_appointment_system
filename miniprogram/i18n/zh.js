@@ -25,6 +25,7 @@ module.exports = {
   tapHint: '點擊空白格子選擇時間，拖動圓點調整時長',
   book: '預約',
   clear: '清除',
+  loading: '載入中…',
   loadFailed: '載入失敗',
   retry: '重試',
   demoMode: '演示模式：資料只保存在本機',

@@ -6,10 +6,10 @@
 }
 
 .opt {
-  min-width: 64rpx;
-  height: 48rpx;
-  padding: 0 16rpx;
-  line-height: 48rpx;
+  min-width: 80rpx;
+  height: 60rpx;
+  padding: 0 18rpx;
+  line-height: 60rpx;
   text-align: center;
   font-size: 24rpx;
   font-weight: 600;

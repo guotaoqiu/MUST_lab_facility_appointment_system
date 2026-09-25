@@ -23,9 +23,29 @@ class Abort extends Error {
   }
 }
 
+const MAX_ATTEMPTS = 4
+
+function errorText(err) {
+  return String((err && (err.errMsg || err.message)) || err)
+}
+
 function isMissingCollection(err) {
-  const text = String((err && (err.errMsg || err.message)) || err)
-  return !!err && (err.errCode === -502005 || /-502005|COLLECTION_NOT_EXIST|collection not exist/i.test(text))
+  return !!err && (err.errCode === -502005 || /-502005|COLLECTION_NOT_EXIST|collection not exist/i.test(errorText(err)))
+}
+
+// wx-server-sdk reports a write conflict inside a transaction as a plain error
+// (errCode -501001, "...TransactionConflict..."), without the `code` that
+// runTransaction's own retry looks for, so conflicts are retried here.
+function isConflict(err) {
+  return !!err && (err.code === 'DATABASE_TRANSACTION_CONFLICT' || /conflict/i.test(errorText(err)))
+}
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function dayId(instrumentId, date) {
+  return instrumentId + '_' + date
 }
 
 // Create the day document up front so concurrent transactions always read and
@@ -49,10 +69,14 @@ async function ensureDay(id, instrumentId, date) {
 
 const store = {
   async listDays(instrumentId, fromDate, toDate) {
+    const ids = []
+    for (let date = fromDate; date <= toDate; date = core.addDays(date, 1)) ids.push(dayId(instrumentId, date))
     try {
+      // Look days up by _id (always indexed) and leave out the cancellation history.
       const res = await db
         .collection(COLLECTION)
-        .where({ instrumentId, date: _.gte(fromDate).and(_.lte(toDate)) })
+        .where({ _id: _.in(ids) })
+        .field({ instrumentId: true, date: true, bookings: true })
         .limit(100)
         .get()
       return res.data
@@ -62,30 +86,34 @@ const store = {
     }
   },
 
-  async updateDay(instrumentId, date, mutate) {
-    const id = instrumentId + '_' + date
-    await ensureDay(id, instrumentId, date)
-    try {
-      // runTransaction retries the callback when another write hits the same document.
-      return await db.runTransaction(async (transaction) => {
-        const ref = transaction.collection(COLLECTION).doc(id)
-        const snapshot = await ref.get()
-        const outcome = mutate(core.normalizeDay(snapshot.data))
-        if (outcome.error) throw new Abort(outcome)
-        await ref.set({
-          data: {
-            instrumentId,
-            date,
-            bookings: outcome.day.bookings,
-            cancelled: outcome.day.cancelled,
-            updatedAt: Date.now()
+  async updateDay(instrumentId, date, mutate, options) {
+    const id = dayId(instrumentId, date)
+    if (!options || options.create !== false) await ensureDay(id, instrumentId, date)
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await db.runTransaction(async (transaction) => {
+          const ref = transaction.collection(COLLECTION).doc(id)
+          const snapshot = await ref.get()
+          const outcome = mutate(core.normalizeDay(snapshot.data))
+          if (outcome.error) throw new Abort(outcome)
+          if (outcome.day) {
+            await ref.set({
+              data: {
+                instrumentId,
+                date,
+                bookings: outcome.day.bookings,
+                cancelled: outcome.day.cancelled,
+                updatedAt: Date.now()
+              }
+            })
           }
+          return outcome
         })
-        return outcome
-      })
-    } catch (err) {
-      if (err instanceof Abort) return err.outcome
-      throw err
+      } catch (err) {
+        if (err instanceof Abort) return err.outcome
+        if (attempt >= MAX_ATTEMPTS || !isConflict(err)) throw err
+        await wait(20 + Math.floor(Math.random() * 80) * attempt)
+      }
     }
   }
 }

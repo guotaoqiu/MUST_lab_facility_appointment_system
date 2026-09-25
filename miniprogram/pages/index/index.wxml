@@ -3,18 +3,20 @@
     <lang-switch id="lang" lang="{{lang}}" bind:change="onLangChange"></lang-switch>
   </view>
 
-  <view class="hero">
-    <image class="logo" src="/images/must-logo.png" mode="widthFix" aria-label="澳門科技大學 Macau University of Science and Technology"></image>
-    <view class="rule"></view>
-    <text class="lab">{{t.labName}}</text>
-    <text class="lab-alt">{{t.labNameAlt}}</text>
-  </view>
-
-  <view class="entry" hover-class="entry-pressed" bindtap="goBooking" aria-role="button">
-    <view class="entry-text">
-      <text class="entry-title">{{t.enterBooking}}</text>
-      <text class="entry-sub">{{t.enterBookingSub}}</text>
+  <view class="center">
+    <view class="hero">
+      <image class="logo" src="/images/must-logo.png" mode="widthFix" aria-label="澳門科技大學 Macau University of Science and Technology"></image>
+      <view class="rule"></view>
+      <text class="lab">{{t.labName}}</text>
+      <text class="lab-alt">{{t.labNameAlt}}</text>
     </view>
-    <view class="entry-arrow"></view>
+
+    <view class="entry" hover-class="entry-pressed" bindtap="goBooking" aria-role="button">
+      <view class="entry-text">
+        <text class="entry-title">{{t.enterBooking}}</text>
+        <text class="entry-sub">{{t.enterBookingSub}}</text>
+      </view>
+      <view class="entry-arrow"></view>
+    </view>
   </view>
 </view>

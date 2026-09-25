@@ -23,6 +23,7 @@ async function openBooking(query = {}) {
   pages.push(page)
   page.instance.onLoad(query)
   page.instance.onShow()
+  page.instance.onReady()
   await flush()
   return page
 }
@@ -143,6 +144,70 @@ describe('booking page', () => {
     expect(w.titles[w.titles.length - 1]).toBe('Instrument Booking')
   })
 
+  test('the grid stays disabled until the bookings have loaded', async () => {
+    const page = await openBooking()
+    const original = service.list
+    let release
+    service.list = () => new Promise((resolve) => (release = resolve))
+    await pick(page, 'centrifuge')
+    expect(page.instance.data.ready).toBe(false)
+    expect(text(page)).toContain('載入中…')
+    expect(calendar(page).instance.data.disabled).toBe(true)
+    await tapCell(page, 5, 600)
+    expect(page.instance.data.selection).toBeNull()
+
+    release({ ok: false, code: 'NETWORK_ERROR' })
+    await flush()
+    expect(text(page)).toContain('載入失敗')
+    expect(calendar(page).instance.data.disabled).toBe(true)
+
+    service.list = original
+    page.querySelector('.status-retry').dispatchEvent('tap')
+    await flush()
+    await flush()
+    expect(page.instance.data.ready).toBe(true)
+    expect(calendar(page).instance.data.disabled).toBe(false)
+  })
+
+  test('a quick double tap on 預約 opens the confirmation once', async () => {
+    const page = await openBooking()
+    await pick(page, 'thermal-imager')
+    await tapCell(page, 5, 600)
+    page.querySelector('.bar-book').dispatchEvent('tap')
+    page.querySelector('.bar-book').dispatchEvent('tap')
+    await flush()
+    expect(w.navigateTo).toHaveLength(1)
+    page.instance.onShow() // back from the confirm page
+    page.querySelector('.bar-book').dispatchEvent('tap')
+    await flush()
+    expect(w.navigateTo).toHaveLength(2)
+  })
+
+  test('the back key closes the side menu or the detail sheet first', async () => {
+    const page = await openBooking()
+    expect(page.instance.data.drawerOpen).toBe(true)
+    page.instance.onOverlayBack()
+    await flush()
+    expect(page.instance.data.drawerOpen).toBe(false)
+  })
+
+  test('a booking that has ended is not offered for cancelling', async () => {
+    await service.create({ instrumentId: 'centrifuge', date: '2026-09-25', startMin: 630, endMin: 660, name: 'Me', purpose: 'Now' })
+    const page = await openBooking()
+    await pick(page, 'centrifuge')
+    const block = () => calendar(page).querySelector('.block-mine')
+    block().dispatchEvent('tap')
+    await flush()
+    expect(page.instance.data.detail.canCancel).toBe(true)
+    page.instance.closeDetail()
+
+    jest.setSystemTime(new Date('2026-09-25T03:05:00Z')) // 11:05, the booking ended at 11:00
+    block().dispatchEvent('tap')
+    await flush()
+    expect(page.instance.data.detail.canCancel).toBe(false)
+    jest.setSystemTime(new Date('2026-09-25T02:40:00Z'))
+  })
+
   test('coming back pre-selects the last instrument behind the side menu', async () => {
     w.storage.set('lastInstrument', JSON.stringify('centrifuge'))
     const page = await openBooking()
@@ -169,12 +234,15 @@ describe('confirm page', () => {
     expect(w.titles).toContain('確認預約')
   })
 
-  test('name and purpose are required', async () => {
+  test('name and purpose are required, and both problems show at once', async () => {
     const page = await openConfirm(query)
     await page.instance.submit()
     await flush()
     expect(text(page)).toContain('請填寫姓名')
+    expect(text(page)).toContain('請說明用途')
     page.instance.onNameInput({ detail: { value: '陳大文' } })
+    await flush()
+    expect(text(page)).not.toContain('請填寫姓名')
     await page.instance.submit()
     await flush()
     expect(text(page)).toContain('請說明用途')
@@ -203,6 +271,19 @@ describe('confirm page', () => {
 
     const list = await service.list('thermal-imager')
     expect(list.bookings.find((b) => b.mine)).toMatchObject({ date: '2026-09-26', startMin: 600, endMin: 690, name: '陳大文' })
+  })
+
+  test('leaving the page before the automatic return does not pop the calendar too', async () => {
+    const timers = jest.spyOn(global, 'setTimeout')
+    const page = await openConfirm(query)
+    page.instance.onNameInput({ detail: { value: '陳大文' } })
+    page.instance.onPurposeInput({ detail: { value: '測試' } })
+    await page.instance.submit()
+    const back = timers.mock.calls.find((c) => c[1] === 1500)
+    timers.mockRestore()
+    page.instance.onUnload() // the user pressed back during the toast
+    back[0]()
+    expect(w.navigateBack).toBe(0)
   })
 
   test('a slot taken in the meantime sends the user back to choose again', async () => {
@@ -258,6 +339,13 @@ describe('full flow', () => {
     expect(w.modals[0]).toMatchObject({ title: '取消預約', confirmText: '取消預約', cancelText: '保留' })
     expect(w.toasts.map((t) => t.title)).toContain('已取消')
     expect(calendar(booking).querySelector('.block-mine')).toBeUndefined()
+
+    // The rendered bottom bar keeps following the selection.
+    await tapCell(booking, 6, 900) // Sunday 15:00
+    const bar = text(booking.querySelector('.bar'))
+    expect(bar).toContain('9月27日（週日）')
+    expect(bar).toContain('15:00 – 15:30 · 30 分鐘')
+    expect(bar).not.toContain('點擊空白格子')
   })
 
   test('keeping the booking in the cancel dialog changes nothing', async () => {

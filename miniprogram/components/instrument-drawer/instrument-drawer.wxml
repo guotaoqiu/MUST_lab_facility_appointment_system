@@ -7,7 +7,7 @@
   </view>
 
   <view class="search">
-    <icon type="search" size="14" color="#98a2ae"></icon>
+    <icon type="search" size="14" color="#66717e"></icon>
     <input
       class="search-input"
       value="{{keyword}}"
@@ -17,7 +17,7 @@
       bindinput="onInput"
     />
     <view wx:if="{{keyword}}" class="search-clear" bindtap="onClear" aria-role="button">
-      <icon type="clear" size="14" color="#98a2ae"></icon>
+      <icon type="clear" size="14" color="#66717e"></icon>
     </view>
   </view>
 

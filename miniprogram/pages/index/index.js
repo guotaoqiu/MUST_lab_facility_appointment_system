@@ -12,6 +12,7 @@ Component({
     },
 
     onShow() {
+      this.navigating = false
       this.applyLang()
     },
 
@@ -26,7 +27,14 @@ Component({
     },
 
     goBooking() {
-      wx.navigateTo({ url: '/pages/booking/booking' })
+      if (this.navigating) return // a quick double tap would open the page twice
+      this.navigating = true
+      wx.navigateTo({
+        url: '/pages/booking/booking',
+        fail: () => {
+          this.navigating = false
+        }
+      })
     },
 
     onShareAppMessage() {

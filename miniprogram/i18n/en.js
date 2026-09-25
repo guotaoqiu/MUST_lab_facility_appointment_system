@@ -25,6 +25,7 @@ module.exports = {
   tapHint: 'Tap an empty slot, then drag the dots to adjust',
   book: 'Book',
   clear: 'Clear',
+  loading: 'Loading…',
   loadFailed: 'Failed to load',
   retry: 'Retry',
   demoMode: 'Demo mode: data is stored on this device only',
