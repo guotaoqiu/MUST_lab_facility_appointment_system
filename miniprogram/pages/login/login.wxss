@@ -20,6 +20,10 @@ page {
   color: var(--must-blue);
 }
 
+.profile-form {
+  width: 100%;
+}
+
 .card {
   width: 100%;
   display: flex;

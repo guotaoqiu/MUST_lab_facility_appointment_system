@@ -211,9 +211,13 @@ function recordStatus(r, now) {
  *   openid           the caller's WeChat openid (trusted: from the platform)
  *   nowMs            current time
  *   checkText(text)  optional content check -> Promise<boolean>
- *   admins           { configured: boolean, verify(account, password) -> Promise<boolean> }
+ *   admins           configured: boolean
+ *                    verify(account, password) -> Promise<key | null>; the key
+ *                      changes when the account's password does
+ *                    isActive({ account, key }) -> boolean: the account still
+ *                      exists with the same password
  *   isAvatarAllowed(avatar) optional
- *   saveFile(bytes, name) -> Promise<{ fileID } | { path }>, deleteFile(file) optional
+ *   saveFile(bytes, name) -> Promise<{ fileID } | { path }>, deleteFile(fileID) optional
  *   store:
  *     listDays(instrumentId, fromDate, toDate) -> day[]  (day = { instrumentId, date, bookings })
  *     updateDay(instrumentId, date, mutate, { create }) -> outcome
@@ -221,8 +225,13 @@ function recordStatus(r, now) {
  *       `records: [{ id, data, merge }]` to write booking records in the same
  *       transaction, { error } to change nothing, or neither to change nothing.
  *       With create: false a missing day document is not created.
- *     getUser(openid) -> user | null, saveUser(openid, user)
- *     listRecords({ openid } | { instrumentId, from, to }) -> records by date
+ *     getUser(openid) -> user | null
+ *     updateUser(openid, mutate) -> outcome
+ *       Runs mutate(user | null) atomically. mutate returns { fields } to merge
+ *       those fields into the user (created if missing), { error } or nothing
+ *       to change nothing.
+ *     listRecords({ openid } | { instrumentId, from, to }) -> { records, truncated }
+ *       records by date; truncated when there were more than the store returns
  *     getStatuses() -> { [instrumentId]: status }, setStatus(instrumentId, status)
  *
  * Collections: day documents (active bookings, used for conflict checks),
@@ -241,7 +250,9 @@ const ACTIONS = {
   myBookings: myBookingsAction,
   adminRecords: adminRecordsAction,
   exportRecords: exportRecordsAction,
-  setSuspended: setSuspendedAction
+  discardExport: discardExportAction,
+  setSuspended: setSuspendedAction,
+  cancelUpcoming: cancelUpcomingAction
 }
 
 async function handleAction(event, ctx) {
@@ -249,19 +260,45 @@ async function handleAction(event, ctx) {
   if (!action || !Object.prototype.hasOwnProperty.call(ACTIONS, event.action)) return fail('BAD_REQUEST')
   if (!ctx.openid) return fail('UNAUTHORIZED')
   const user = await ctx.store.getUser(ctx.openid)
-  const isAdmin = !!(user && user.admin && user.admin.expiresAt > ctx.nowMs)
-  return action(event, Object.assign({}, ctx, { user, isAdmin }))
+  return action(event, Object.assign({}, ctx, { user, isAdmin: isAdminSession(user, ctx) }))
+}
+
+// An admin sign-in lasts a week, and ends early when the account is removed
+// or its password changed.
+function isAdminSession(user, ctx) {
+  const admin = user && user.admin
+  return !!(admin && admin.expiresAt > ctx.nowMs && ctx.admins && ctx.admins.isActive && ctx.admins.isActive(admin))
 }
 
 function meOf(ctx) {
   const u = ctx.user || {}
   return {
-    loggedIn: !!u.nickname,
+    loggedIn: !!u.nickname && !u.signedOut,
     nickname: u.nickname || '',
     avatar: u.avatar || '',
     isAdmin: ctx.isAdmin,
     account: ctx.isAdmin ? u.admin.account : ''
   }
+}
+
+/** ctx as it is after `fields` were saved to the user. */
+function withUser(ctx, fields, extra) {
+  return Object.assign({}, ctx, { user: Object.assign({}, ctx.user, fields) }, extra)
+}
+
+/** Merge fields into the caller's user document (only these fields, so
+ *  concurrent requests do not undo each other's changes). */
+function saveUser(ctx, fields) {
+  return ctx.store.updateUser(ctx.openid, (user) => ({
+    fields: user && user.createdAt ? fields : Object.assign({ createdAt: ctx.nowMs }, fields)
+  }))
+}
+
+function discardFile(ctx, fileID) {
+  if (!fileID || !ctx.deleteFile) return null
+  return Promise.resolve()
+    .then(() => ctx.deleteFile(fileID))
+    .catch(() => {})
 }
 
 async function meAction(event, ctx) {
@@ -273,9 +310,9 @@ async function loginAction(event, ctx) {
   const existing = ctx.user || {}
   if (event.nickname == null) {
     if (!existing.nickname) return { ok: true, needsProfile: true, me: meOf(ctx) }
-    const user = Object.assign({}, existing, { lastLoginAt: now })
-    await ctx.store.saveUser(ctx.openid, user)
-    return { ok: true, me: meOf(Object.assign({}, ctx, { user })) }
+    const fields = { lastLoginAt: now, signedOut: false }
+    await saveUser(ctx, fields)
+    return { ok: true, me: meOf(withUser(ctx, fields)) }
   }
   const nickname = cleanText(event.nickname)
   if (!nickname) return fail('NICKNAME_REQUIRED')
@@ -284,18 +321,18 @@ async function loginAction(event, ctx) {
   if (typeof avatar !== 'string' || avatar.length > 512 || /\s/.test(avatar)) return fail('BAD_REQUEST')
   if (avatar && ctx.isAvatarAllowed && !ctx.isAvatarAllowed(avatar)) return fail('BAD_REQUEST')
   if (ctx.checkText && !(await ctx.checkText(nickname))) return fail('CONTENT_REJECTED')
-  const user = Object.assign({}, existing, { nickname, avatar, lastLoginAt: now, createdAt: existing.createdAt || now })
-  await ctx.store.saveUser(ctx.openid, user)
-  return { ok: true, me: meOf(Object.assign({}, ctx, { user })) }
+  const fields = { nickname, avatar, lastLoginAt: now, signedOut: false }
+  await saveUser(ctx, fields)
+  return { ok: true, me: meOf(withUser(ctx, fields)) }
 }
 
+// Ends both kinds of sign-in for this WeChat account (on every device).
 async function logoutAction(event, ctx) {
-  if (ctx.user && ctx.user.admin) {
-    const user = Object.assign({}, ctx.user, { admin: null })
-    await ctx.store.saveUser(ctx.openid, user)
-    return { ok: true, me: meOf(Object.assign({}, ctx, { user, isAdmin: false })) }
-  }
-  return { ok: true, me: meOf(ctx) }
+  if (!ctx.user) return { ok: true, me: meOf(ctx) }
+  const fields = { admin: null, signedOut: true, lastExport: null }
+  await saveUser(ctx, fields)
+  await discardFile(ctx, ctx.user.lastExport)
+  return { ok: true, me: meOf(withUser(ctx, fields, { isAdmin: false })) }
 }
 
 async function adminLoginAction(event, ctx) {
@@ -306,32 +343,36 @@ async function adminLoginAction(event, ctx) {
     return fail('CREDENTIALS_REQUIRED')
   }
   if (account.length > 64 || password.length > 128) return fail('INVALID_CREDENTIALS')
-  const existing = ctx.user || {}
-  const failure = existing.adminFail || {}
-  if (failure.lockedUntil > now) return lockedOut(failure.lockedUntil, now)
 
-  if (!(await ctx.admins.verify(account.trim(), password))) {
+  // Count the attempt before checking the password, in one atomic step, so
+  // attempts sent in parallel cannot get round the limit.
+  const attempt = await ctx.store.updateUser(ctx.openid, (user) => {
+    const failure = (user && user.adminFail) || {}
+    if (failure.lockedUntil > now) return { error: 'TOO_MANY_ATTEMPTS', lockedUntil: failure.lockedUntil }
     const count = (failure.lockedUntil ? 0 : failure.count || 0) + 1
-    const adminFail = count >= ADMIN_MAX_FAILURES ? { count: 0, lockedUntil: now + ADMIN_LOCK_MS } : { count, lockedUntil: 0 }
-    await ctx.store.saveUser(ctx.openid, Object.assign({}, existing, { adminFail, createdAt: existing.createdAt || now }))
-    if (adminFail.lockedUntil) return lockedOut(adminFail.lockedUntil, now)
-    return Object.assign(fail('INVALID_CREDENTIALS'), { attemptsLeft: ADMIN_MAX_FAILURES - count })
-  }
-  const user = Object.assign({}, existing, {
-    admin: { account: account.trim(), since: now, expiresAt: now + ADMIN_SESSION_MS },
-    adminFail: null,
-    createdAt: existing.createdAt || now
+    const adminFail = { count, lockedUntil: count >= ADMIN_MAX_FAILURES ? now + ADMIN_LOCK_MS : 0 }
+    return { adminFail, fields: user && user.createdAt ? { adminFail } : { adminFail, createdAt: now } }
   })
-  await ctx.store.saveUser(ctx.openid, user)
-  return { ok: true, me: meOf(Object.assign({}, ctx, { user, isAdmin: true })) }
+  if (attempt.error) return lockedOut(attempt.lockedUntil, now)
+
+  const key = await ctx.admins.verify(account.trim(), password)
+  if (!key) {
+    if (attempt.adminFail.lockedUntil) return lockedOut(attempt.adminFail.lockedUntil, now)
+    return Object.assign(fail('INVALID_CREDENTIALS'), { attemptsLeft: ADMIN_MAX_FAILURES - attempt.adminFail.count })
+  }
+  const fields = { admin: { account: account.trim(), key, since: now, expiresAt: now + ADMIN_SESSION_MS }, adminFail: null }
+  await saveUser(ctx, fields)
+  return { ok: true, me: meOf(withUser(ctx, fields, { isAdmin: true })) }
 }
 
 function lockedOut(until, now) {
   return Object.assign(fail('TOO_MANY_ATTEMPTS'), { retryAfterMin: Math.ceil((until - now) / 60000) })
 }
 
+// Failures that change who the caller is also say who they are now, so the
+// mini program can update its sign-in state.
 function requireAdmin(ctx) {
-  return ctx.isAdmin ? null : fail('ADMIN_REQUIRED')
+  return ctx.isAdmin ? null : Object.assign(fail('ADMIN_REQUIRED'), { me: meOf(ctx) })
 }
 
 async function suspendedMap(ctx) {
@@ -371,7 +412,7 @@ function adminFields(r) {
 }
 
 /** A booking record as shown in "my bookings" and the admin list. */
-function recordView(r, ctx, now) {
+function recordView(r, ctx, now, suspended) {
   const status = recordStatus(r, now)
   const out = {
     id: r.id,
@@ -385,9 +426,26 @@ function recordView(r, ctx, now) {
     createdAt: r.createdAt || 0,
     cancelledAt: r.cancelledAt || 0,
     cancelledBy: r.cancelledBy || '',
+    cancelReason: r.cancelReason || '',
+    suspendReason: r.suspendReason || '',
     canCancel: status === 'booked' && (r.openid === ctx.openid || ctx.isAdmin)
   }
+  // The instrument stopped taking bookings after this one was made.
+  const stopped = status === 'booked' && suspended && suspended[r.instrumentId]
+  if (stopped) out.suspended = { reason: stopped.reason }
   if (ctx.isAdmin) Object.assign(out, adminFields(r), { cancelledByName: r.cancelledByName || '' })
+  return out
+}
+
+function cancelledFields(ctx, own, suspendReason) {
+  const me = meOf(ctx)
+  const out = {
+    status: 'cancelled',
+    cancelledAt: ctx.nowMs,
+    cancelledBy: own ? 'self' : 'admin',
+    cancelledByName: own ? me.nickname : me.account
+  }
+  if (suspendReason != null) Object.assign(out, { cancelReason: 'suspended', suspendReason })
   return out
 }
 
@@ -407,16 +465,16 @@ async function listAction(event, ctx) {
 
 async function createAction(event, ctx) {
   const me = meOf(ctx)
-  if (!me.loggedIn && !me.isAdmin) return fail('NOT_LOGGED_IN')
+  if (!me.loggedIn && !me.isAdmin) return Object.assign(fail('NOT_LOGGED_IN'), { me })
   const { instrumentId, requestId } = event
   if (!isInstrument(instrumentId)) return fail('BAD_INSTRUMENT')
   if (requestId != null && !(typeof requestId === 'string' && /^[\w-]{1,64}$/.test(requestId))) return fail('BAD_REQUEST')
   const checked = validateBooking(event, ctx.nowMs)
   if (!checked.ok) return checked
   const v = checked.value
-  if ((await suspendedMap(ctx))[instrumentId]) return fail('SUSPENDED')
-
   if (ctx.checkText && !(await ctx.checkText(v.name + '\n' + v.purpose))) return fail('CONTENT_REJECTED')
+  // Checked last, just before booking, so a suspension made meanwhile counts.
+  if ((await suspendedMap(ctx))[instrumentId]) return fail('SUSPENDED')
 
   const booking = {
     id: makeId(ctx.nowMs),
@@ -460,7 +518,6 @@ async function cancelAction(event, ctx) {
   }
   const now = localNow(ctx.nowMs)
   if (date > bookingWindow(ctx.nowMs).lastDate) return fail('NOT_FOUND')
-  const me = meOf(ctx)
   const outcome = await ctx.store.updateDay(
     instrumentId,
     date,
@@ -468,27 +525,23 @@ async function cancelAction(event, ctx) {
       const target = day.bookings.find((b) => b.id === id)
       if (!target) return { error: 'NOT_FOUND' }
       const own = target.openid === ctx.openid
-      if (!own && !ctx.isAdmin) return { error: 'FORBIDDEN' }
+      // Someone whose admin sign-in has ended is told so, not "not yours".
+      if (!own && !ctx.isAdmin) return { error: ctx.user && ctx.user.admin ? 'ADMIN_REQUIRED' : 'FORBIDDEN' }
       if (isPast(date, target.endMin, now)) return { error: 'ALREADY_ENDED' }
       day.bookings = day.bookings.filter((b) => b.id !== id)
-      const cancelled = {
-        status: 'cancelled',
-        cancelledAt: ctx.nowMs,
-        cancelledBy: own ? 'self' : 'admin',
-        cancelledByName: own ? me.nickname : me.account
-      }
-      return { day, records: [{ id, data: cancelled, merge: true }] }
+      return { day, records: [{ id, data: cancelledFields(ctx, own), merge: true }] }
     },
     { create: false }
   )
+  if (outcome.error === 'ADMIN_REQUIRED') return requireAdmin(ctx)
   if (outcome.error) return fail(outcome.error)
   return { ok: true }
 }
 
 async function myBookingsAction(event, ctx) {
   const now = localNow(ctx.nowMs)
-  const records = (await ctx.store.listRecords({ openid: ctx.openid })) || []
-  const views = records.map((r) => recordView(r, ctx, now))
+  const [listed, suspended] = await Promise.all([ctx.store.listRecords({ openid: ctx.openid }), suspendedMap(ctx)])
+  const views = listed.records.map((r) => recordView(r, ctx, now, suspended))
   const upcoming = views.filter((r) => r.status === 'booked').sort(byDateAndStart)
   const history = views
     .filter((r) => r.status !== 'booked')
@@ -514,44 +567,71 @@ async function adminRecordsAction(event, ctx) {
   if (!isInstrument(instrumentId) || !isMonthString(month)) return fail('BAD_REQUEST')
   const now = localNow(ctx.nowMs)
   const range = monthRange(month)
-  const [records, suspended] = await Promise.all([
+  const [listed, suspended] = await Promise.all([
     ctx.store.listRecords({ instrumentId, from: range.from, to: range.to }),
     suspendedMap(ctx)
   ])
-  const views = (records || []).map((r) => recordView(r, ctx, now)).sort(byDateAndStart)
+  const views = listed.records.map((r) => recordView(r, ctx, now)).sort(byDateAndStart)
   return { ok: true, month, records: views, summary: summarize(views), suspended: suspended[instrumentId] || null, me: meOf(ctx) }
 }
 
 const EXPORT_TEXT = {
   zh: {
-    headers: ['日期', '星期', '開始', '結束', '時長（小時）', '姓名', '用途', '微信暱稱', '微信用戶 ID', '狀態', '預約時間', '取消時間', '取消人'],
+    headers: ['儀器', '日期', '星期', '開始', '結束', '時長（小時）', '姓名', '用途', '微信暱稱', '微信用戶 ID', '狀態', '提交時間', '取消時間', '取消人', '取消原因'],
     weekdays: ['日', '一', '二', '三', '四', '五', '六'],
     status: { booked: '已預約', completed: '已完成', cancelled: '已取消' },
     by: { self: '本人', admin: '管理員' },
+    suspended: '儀器暫停預約',
+    colon: '：',
+    bracket: (s) => '（' + s + '）',
     all: '全部'
   },
   en: {
-    headers: ['Date', 'Day', 'Start', 'End', 'Hours', 'Name', 'Purpose', 'WeChat nickname', 'WeChat user ID', 'Status', 'Booked at', 'Cancelled at', 'Cancelled by'],
+    headers: ['Instrument', 'Date', 'Day', 'Start', 'End', 'Hours', 'Name', 'Purpose', 'WeChat nickname', 'WeChat user ID', 'Status', 'Submitted at', 'Cancelled at', 'Cancelled by', 'Cancellation reason'],
     weekdays: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
     status: { booked: 'Booked', completed: 'Completed', cancelled: 'Cancelled' },
     by: { self: 'Booker', admin: 'Admin' },
+    suspended: 'Instrument suspended',
+    colon: ': ',
+    bracket: (s) => ' (' + s + ')',
     all: 'all'
   }
 }
-const EXPORT_WIDTHS = [12, 6, 8, 8, 12, 14, 36, 16, 32, 10, 18, 18, 14]
+const EXPORT_COLUMNS = [
+  { width: 24 },
+  { width: 12, type: 'date' },
+  { width: 6 },
+  { width: 8, type: 'time' },
+  { width: 8, type: 'time' },
+  { width: 12 },
+  { width: 14 },
+  { width: 36 },
+  { width: 16 },
+  { width: 32 },
+  { width: 10 },
+  { width: 18, type: 'datetime' },
+  { width: 18, type: 'datetime' },
+  { width: 16 },
+  { width: 24 }
+]
 
 async function exportRecordsAction(event, ctx) {
   const denied = requireAdmin(ctx)
   if (denied) return denied
   const { instrumentId, month } = event
-  const text = EXPORT_TEXT[event.lang] || EXPORT_TEXT.zh
+  const lang = event.lang === 'en' ? 'en' : 'zh'
+  const text = EXPORT_TEXT[lang]
   if (!isInstrument(instrumentId) || (month != null && !isMonthString(month))) return fail('BAD_REQUEST')
   const query = month ? Object.assign({ instrumentId }, monthRange(month)) : { instrumentId }
   const now = localNow(ctx.nowMs)
-  const views = ((await ctx.store.listRecords(query)) || []).map((r) => recordView(r, ctx, now)).sort(byDateAndStart)
+  const listed = await ctx.store.listRecords(query)
+  if (listed.truncated) return fail('TOO_MANY_RECORDS')
+  const views = listed.records.map((r) => recordView(r, ctx, now)).sort(byDateAndStart)
   if (!views.length) return fail('NOTHING_TO_EXPORT')
 
+  const instrument = instrumentLabel(instrumentId, lang)
   const rows = views.map((r) => [
+    instrument,
     r.date,
     text.weekdays[weekdayOf(r.date)],
     minutesToText(r.startMin),
@@ -564,21 +644,48 @@ async function exportRecordsAction(event, ctx) {
     text.status[r.status],
     formatTimestamp(r.createdAt),
     formatTimestamp(r.cancelledAt),
-    r.cancelledBy ? text.by[r.cancelledBy] + (r.cancelledByName ? '（' + r.cancelledByName + '）' : '') : ''
+    r.cancelledBy ? text.by[r.cancelledBy] + (r.cancelledByName ? text.bracket(r.cancelledByName) : '') : '',
+    r.cancelReason === 'suspended' ? text.suspended + (r.suspendReason ? text.colon + r.suspendReason : '') : ''
   ])
-  const label = instrumentLabel(instrumentId, event.lang === 'en' ? 'en' : 'zh').replace(/[\\/:*?"<>|\s]+/g, '')
   const period = month || text.all
+  const name = instrument.replace(/[\\/:*?"<>|\s]+/g, '') + '_' + period + '.xlsx'
   const bytes = xlsx.buildXlsx({
     sheetName: period,
-    columns: text.headers.map((header, i) => ({ header, width: EXPORT_WIDTHS[i] })),
+    columns: text.headers.map((header, i) => Object.assign({ header }, EXPORT_COLUMNS[i])),
     rows
   })
-  const file = await ctx.saveFile(bytes, label + '_' + period + '.xlsx')
-  // Keep only the latest export per admin in cloud storage.
-  const previous = ctx.user && ctx.user.lastExport
-  if (previous && ctx.deleteFile) await Promise.resolve(ctx.deleteFile(previous)).catch(() => {})
-  if (file.fileID) await ctx.store.saveUser(ctx.openid, Object.assign({}, ctx.user, { lastExport: file.fileID }))
-  return { ok: true, file: Object.assign({ name: label + '_' + period + '.xlsx' }, file), count: views.length }
+  const file = await ctx.saveFile(bytes, name)
+  if (file.fileID) {
+    // Keep only the latest export per admin in cloud storage (the mini
+    // program also discards it once downloaded, see discardExport).
+    const saved = await ctx.store.updateUser(ctx.openid, (user) => ({
+      previous: user && user.lastExport,
+      fields: { lastExport: file.fileID }
+    }))
+    if (saved.previous !== file.fileID) await discardFile(ctx, saved.previous)
+  }
+  return { ok: true, file: Object.assign({ name }, file), count: views.length }
+}
+
+/** The mini program has downloaded the export: remove it from cloud storage. */
+async function discardExportAction(event, ctx) {
+  const { fileID } = event
+  if (typeof fileID !== 'string' || !fileID) return fail('BAD_REQUEST')
+  const outcome = await ctx.store.updateUser(ctx.openid, (user) =>
+    user && user.lastExport === fileID ? { found: true, fields: { lastExport: null } } : {}
+  )
+  if (outcome.found) await discardFile(ctx, fileID)
+  return { ok: true }
+}
+
+/** Bookings on the calendar that have not ended yet. */
+async function upcomingDays(instrumentId, ctx) {
+  const win = bookingWindow(ctx.nowMs)
+  const now = localNow(ctx.nowMs)
+  const days = (await ctx.store.listDays(instrumentId, win.today, win.lastDate)) || []
+  return days
+    .map((day) => ({ date: day.date, bookings: normalizeDay(day).bookings.filter((b) => !isPast(day.date, b.endMin, now)) }))
+    .filter((day) => day.bookings.length)
 }
 
 async function setSuspendedAction(event, ctx) {
@@ -595,7 +702,40 @@ async function setSuspendedAction(event, ctx) {
     updatedBy: ctx.user.admin.account
   }
   await ctx.store.setStatus(instrumentId, status)
-  return { ok: true, suspended: event.suspended ? { reason: status.reason, since: status.updatedAt } : null }
+  // Bookings already made are kept; the admin decides whether to cancel them.
+  const upcoming = event.suspended ? (await upcomingDays(instrumentId, ctx)).reduce((n, d) => n + d.bookings.length, 0) : 0
+  return { ok: true, suspended: event.suspended ? { reason: status.reason, since: status.updatedAt } : null, upcoming }
+}
+
+/** Cancel every booking of an instrument that has not ended yet (e.g. it broke). */
+async function cancelUpcomingAction(event, ctx) {
+  const denied = requireAdmin(ctx)
+  if (denied) return denied
+  const { instrumentId } = event
+  if (!isInstrument(instrumentId)) return fail('BAD_REQUEST')
+  const reason = cleanText(event.reason)
+  if (textLength(reason) > SUSPEND_REASON_MAX) return fail('REASON_TOO_LONG')
+  const now = localNow(ctx.nowMs)
+  let cancelled = 0
+  for (const { date } of await upcomingDays(instrumentId, ctx)) {
+    const outcome = await ctx.store.updateDay(
+      instrumentId,
+      date,
+      (day) => {
+        const ending = day.bookings.filter((b) => !isPast(date, b.endMin, now))
+        if (!ending.length) return {}
+        day.bookings = day.bookings.filter((b) => isPast(date, b.endMin, now))
+        return {
+          day,
+          count: ending.length,
+          records: ending.map((b) => ({ id: b.id, data: cancelledFields(ctx, false, reason), merge: true }))
+        }
+      },
+      { create: false }
+    )
+    cancelled += outcome.count || 0
+  }
+  return { ok: true, cancelled }
 }
 
 module.exports = {

@@ -19,32 +19,36 @@
       </view>
     </view>
 
-    <view wx:else class="card">
-      <text class="card-title">{{t.profileTitle}}</text>
-      <text class="hint">{{t.profileHint}}</text>
-      <button class="avatar-btn" open-type="chooseAvatar" bind:chooseavatar="onChooseAvatar" hover-class="none">
-        <image class="avatar" src="{{avatar || '/images/icons/avatar.png'}}" mode="aspectFill"></image>
-        <text class="avatar-label">{{t.chooseAvatar}}</text>
-      </button>
-      <view class="field">
-        <text class="label">{{t.nickname}}</text>
-        <input
-          class="input {{error ? 'input-error' : ''}}"
-          type="nickname"
-          value="{{nickname}}"
-          maxlength="{{nicknameMax}}"
-          placeholder="{{t.nicknamePlaceholder}}"
-          placeholder-class="placeholder"
-          bindinput="onNickname"
-          bindblur="onNickname"
-          bindchange="onNickname"
-        />
+    <form wx:else class="profile-form" bindsubmit="onSaveProfile">
+      <view class="card">
+        <text class="card-title">{{edit ? t.editProfile : t.profileTitle}}</text>
+        <text class="hint">{{t.profileHint}}</text>
+        <button class="avatar-btn" open-type="chooseAvatar" bind:chooseavatar="onChooseAvatar" hover-class="none">
+          <image class="avatar" src="{{avatar || '/images/icons/avatar.png'}}" mode="aspectFill"></image>
+          <text class="avatar-label">{{t.chooseAvatar}}</text>
+        </button>
+        <view class="field">
+          <text class="label">{{t.nickname}}</text>
+          <input
+            class="input {{error ? 'input-error' : ''}}"
+            type="nickname"
+            name="nickname"
+            value="{{nickname}}"
+            maxlength="{{nicknameMax}}"
+            placeholder="{{t.nicknamePlaceholder}}"
+            placeholder-class="placeholder"
+            bindinput="onNickname"
+            bindblur="onNickname"
+            bindchange="onNickname"
+            bindnicknamereview="onNicknameReview"
+          />
+        </view>
+        <text wx:if="{{error}}" class="error">{{error}}</text>
+        <button class="btn btn-primary login-btn {{busy ? 'btn-disabled' : ''}}" hover-class="btn-pressed" form-type="submit">
+          {{busy ? t.loggingIn : edit ? t.save : t.finishLogin}}
+        </button>
       </view>
-      <text wx:if="{{error}}" class="error">{{error}}</text>
-      <view class="btn btn-primary login-btn {{busy ? 'btn-disabled' : ''}}" hover-class="btn-pressed" bindtap="onSaveProfile" aria-role="button">
-        {{busy ? t.loggingIn : t.finishLogin}}
-      </view>
-    </view>
+    </form>
   </block>
 
   <!-- Administrator -->

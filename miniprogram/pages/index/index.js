@@ -6,18 +6,22 @@ Component({
     lang: 'zh',
     t: {},
     session: null,
-    choiceOpen: false
+    choiceOpen: false,
+    expired: false // came here because the sign-in ended
   },
 
   methods: {
     onLoad(query) {
       this.applyLang()
-      // Other pages send people here with ?login=1 when they need to sign in.
+      // Other pages send people here with ?login=1 when they need to sign in
+      // (&expired=1 when their sign-in has ended).
       if (query && query.login === '1') this.openChoice = true
+      if (query && query.expired === '1') this.setData({ expired: true })
     },
 
     onShow() {
       this.navigating = false
+      clearTimeout(this.choiceTimer)
       this.applyLang()
       this.setData({ session: session.get() })
     },
@@ -55,13 +59,35 @@ Component({
       else this.setData({ choiceOpen: true })
     },
 
+    onHide() {
+      clearTimeout(this.choiceTimer)
+    },
+
     closeChoice() {
       this.setData({ choiceOpen: false })
     },
 
     chooseLogin(e) {
-      this.setData({ choiceOpen: false })
-      this.navigate('/pages/login/login?mode=' + e.currentTarget.dataset.mode)
+      if (this.navigating) return
+      this.navigating = true // until the next onShow; a second tap is ignored
+      const url = '/pages/login/login?mode=' + e.currentTarget.dataset.mode
+      // Let the page-container behind the sheet close before leaving the
+      // page; closing it and navigating at once can leave the back key stuck.
+      this.setData({ choiceOpen: false }, () => {
+        this.choiceTimer = setTimeout(() => {
+          wx.navigateTo({
+            url,
+            fail: () => {
+              this.navigating = false
+            }
+          })
+        }, 100)
+      })
+    },
+
+    // Signed in as a WeChat user: administrator sign-in stays one tap away.
+    goAdminLogin() {
+      this.navigate('/pages/login/login?mode=admin')
     },
 
     goSettings() {

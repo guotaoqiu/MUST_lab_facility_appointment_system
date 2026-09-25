@@ -7,6 +7,8 @@
 //   error with errCode -501001 and no `code`, which runTransaction does NOT
 //   retry by itself. (A conflict reported at commit keeps its `code` and is
 //   retried by runTransaction, as in @cloudbase/database.)
+// - documents that tie on every orderBy field come back in a different order
+//   in each query, as MongoDB allows.
 const crypto = require('crypto')
 
 const COMMIT_CONFLICT = { code: 'DATABASE_TRANSACTION_CONFLICT', message: 'transaction conflict' }
@@ -25,7 +27,8 @@ function createFakeCloud() {
     beforeWrite: null, // hook to simulate a concurrent write inside a transaction
     transactions: 0,
     uploads: [],
-    deleted: []
+    deleted: [],
+    queries: 0
   }
   const copy = (v) => JSON.parse(JSON.stringify(v))
   const docs = (name) => {
@@ -66,6 +69,13 @@ function createFakeCloud() {
           const doc = Object.assign({ _id: id }, copy(entry.data))
           if (matches(doc, where)) out.push(doc)
         })
+        // Shuffle first (deterministically per query): ties keep a random order.
+        let seed = ++state.queries * 7919
+        for (let i = out.length - 1; i > 0; i--) {
+          seed = (seed * 16807) % 2147483647
+          const j = seed % (i + 1)
+          ;[out[i], out[j]] = [out[j], out[i]]
+        }
         out.sort((a, b) => {
           for (const [f, dir] of order) if (a[f] !== b[f]) return (a[f] < b[f] ? -1 : 1) * (dir === 'desc' ? -1 : 1)
           return 0
@@ -186,6 +196,7 @@ const mockFake = createFakeCloud()
 jest.mock('wx-server-sdk', () => mockFake.cloud, { virtual: true })
 
 const { cloud, state } = mockFake
+const { table } = require('./support/xlsx-reader')
 const fn = require('../cloudfunctions/booking/index')
 const settings = require('../cloudfunctions/booking/settings')
 
@@ -256,7 +267,7 @@ test('creates a booking in the day document and in the booking records, and list
 })
 
 test('users must log in before booking', async () => {
-  expect(await as('stranger', booking())).toEqual({ ok: false, code: 'NOT_LOGGED_IN' })
+  expect(await as('stranger', booking())).toMatchObject({ ok: false, code: 'NOT_LOGGED_IN' })
 })
 
 test('refuses an overlapping booking and leaves the day unchanged', async () => {
@@ -359,6 +370,113 @@ describe('administrator login', () => {
     settings.ADMIN_ACCOUNTS.length = 0
     expect(await as('a1', { action: 'adminLogin', account: 'labadmin', password: 'correct horse' })).toEqual({ ok: false, code: 'ADMIN_NOT_CONFIGURED' })
   })
+
+  test('removing the account or changing its password ends its sign-ins', async () => {
+    const login = () => as('a1', { action: 'adminLogin', account: 'labadmin', password: 'correct horse' })
+    const me = async () => (await as('a1', { action: 'me' })).me
+    expect((await login()).me.isAdmin).toBe(true)
+    expect((await me()).isAdmin).toBe(true)
+
+    settings.ADMIN_ACCOUNTS[0] = { account: 'labadmin', passwordHash: hash('correct horse') } // same password, new hash
+    expect((await me()).isAdmin).toBe(false)
+    expect((await login()).me.isAdmin).toBe(true)
+
+    settings.ADMIN_ACCOUNTS.length = 0
+    settings.ADMIN_ACCOUNTS.push({ account: 'other', passwordHash: hash('x') })
+    expect((await me()).isAdmin).toBe(false)
+    expect(await as('a1', { action: 'setSuspended', instrumentId: 'centrifuge', suspended: true })).toMatchObject({ ok: false, code: 'ADMIN_REQUIRED' })
+  })
+
+  test('a malformed entry in settings.js is treated as no account (and attempts still count)', async () => {
+    jest.spyOn(console, 'error').mockImplementation(() => {})
+    settings.ADMIN_ACCOUNTS.push({ account: 'typo', passwordHash: 'pbkdf2_sha256$100,000$abc$def' })
+    expect(await as('a1', { action: 'adminLogin', account: 'typo', password: 'anything' })).toEqual({ ok: false, code: 'INVALID_CREDENTIALS', attemptsLeft: 4 })
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('ADMIN_ACCOUNTS[1]'))
+    console.error.mockRestore()
+  })
+
+  test('wrong passwords sent in parallel are counted one by one', async () => {
+    const spy = jest.spyOn(crypto, 'pbkdf2')
+    const results = await Promise.all(
+      Array.from({ length: 8 }, () => as('a1', { action: 'adminLogin', account: 'labadmin', password: 'wrong' }))
+    )
+    // At most 5 passwords were checked; the rest were refused (or failed
+    // closed after repeated conflicts) without a check.
+    expect(spy.mock.calls.length).toBeLessThanOrEqual(5)
+    expect(results.some((r) => r.ok)).toBe(false)
+    expect(results.filter((r) => r.code === 'INVALID_CREDENTIALS').length).toBeLessThanOrEqual(4)
+    spy.mockRestore()
+  })
+})
+
+describe('documents written by a mini program client are ignored', () => {
+  // Under the default "creator can read and write" rule a client can add
+  // documents; the platform stamps them with the client's _openid.
+  const forge = (collection, id, data) => docsOf(collection).set(id, { data: Object.assign({ _openid: 'user-1' }, data), version: 1 })
+
+  test('a forged users document does not make anyone an administrator', async () => {
+    jest.spyOn(console, 'warn').mockImplementation(() => {})
+    forge('users', 'user-9', { nickname: 'x', admin: { account: 'labadmin', key: 'x', since: 0, expiresAt: 4102444800000 } })
+    expect((await as('user-9', { action: 'me' })).me).toMatchObject({ isAdmin: false, loggedIn: false })
+    expect(await as('user-9', { action: 'setSuspended', instrumentId: 'centrifuge', suspended: true })).toMatchObject({ ok: false, code: 'ADMIN_REQUIRED' })
+    // Signing in normally replaces it with a document the function wrote.
+    expect((await as('user-9', { action: 'login', nickname: 'Real' })).me).toMatchObject({ loggedIn: true, isAdmin: false })
+    expect(docsOf('users').get('user-9').data._openid).toBeUndefined()
+    console.warn.mockRestore()
+  })
+
+  test('forged statuses, records and day documents are ignored', async () => {
+    jest.spyOn(console, 'warn').mockImplementation(() => {})
+    forge('instrument_status', 'centrifuge', { suspended: true, reason: 'fake' })
+    forge('bookings', 'fake-1', { instrumentId: 'centrifuge', date: '2026-09-28', startMin: 600, endMin: 660, openid: 'user-2', status: 'active' })
+    forge('schedules', 'centrifuge_2026-09-29', { instrumentId: 'centrifuge', date: '2026-09-29', bookings: [{ id: 'f', startMin: 480, endMin: 1320 }] })
+    expect((await fn.main({ action: 'list', instrumentId: 'centrifuge' })).suspended).toEqual({})
+    expect((await fn.main({ action: 'list', instrumentId: 'centrifuge' })).bookings).toEqual([])
+    expect((await as('user-2', { action: 'myBookings' })).upcoming).toEqual([])
+    expect((await create({ date: '2026-09-29' })).ok).toBe(true)
+    console.warn.mockRestore()
+  })
+})
+
+describe('booking records', () => {
+  const addRecords = (n, make) => {
+    for (let i = 0; i < n; i++) {
+      const r = make(i)
+      docsOf('bookings').set(r.id, { data: Object.assign({ instrumentId: 'centrifuge', status: 'cancelled', openid: 'user-1', name: 'N', purpose: 'P' }, r, { id: undefined }), version: 1 })
+    }
+  }
+  const adminIn = () => as('admin-1', { action: 'adminLogin', account: 'labadmin', password: 'correct horse' })
+
+  test('a month shows only that month, in date and time order', async () => {
+    addRecords(6, (i) => ({ id: 'r' + i, date: ['2026-08-31', '2026-09-30', '2026-09-01', '2026-10-01', '2026-09-15', '2026-09-15'][i], startMin: [600, 600, 600, 600, 900, 540][i], endMin: 1000 }))
+    await adminIn()
+    const res = await as('admin-1', { action: 'adminRecords', instrumentId: 'centrifuge', month: '2026-09' })
+    expect(res.records.map((r) => r.date + ' ' + r.startMin)).toEqual(['2026-09-01 600', '2026-09-15 540', '2026-09-15 900', '2026-09-30 600'])
+  })
+
+  test('large histories are read page by page without gaps or repeats', async () => {
+    // Many records share date and start time (cancelled and booked again).
+    addRecords(2500, (i) => ({
+      id: 'r' + String(i).padStart(5, '0'),
+      name: 'N' + i,
+      date: '2026-09-' + String(1 + (i % 28)).padStart(2, '0'),
+      startMin: 600 + (i % 3) * 30,
+      endMin: 700
+    }))
+    await adminIn()
+    const res = await as('admin-1', { action: 'exportRecords', instrumentId: 'centrifuge', lang: 'en' })
+    expect(res.count).toBe(2500)
+    const rows = table(state.uploads[0].fileContent)
+    expect(new Set(rows.map((r) => r.Name)).size).toBe(2500) // every record exactly once
+    const keys = rows.map((r) => r.Date + ' ' + r.Start)
+    expect(keys).toEqual(keys.slice().sort())
+  })
+
+  test('beyond 20 pages the export asks for one month at a time', async () => {
+    addRecords(20001, (i) => ({ id: 'r' + i, date: '2026-09-01', startMin: 600, endMin: 660 }))
+    await adminIn()
+    expect(await as('admin-1', { action: 'exportRecords', instrumentId: 'centrifuge' })).toEqual({ ok: false, code: 'TOO_MANY_RECORDS' })
+  })
 })
 
 test('admin records, suspension and export', async () => {
@@ -377,9 +495,23 @@ test('admin records, suspension and export', async () => {
   expect(first.file.fileID).toMatch(/^cloud:\/\/env\/exports\/\w+\.xlsx$/)
   expect(Buffer.isBuffer(state.uploads[0].fileContent)).toBe(true)
   expect(state.uploads[0].fileContent.slice(0, 2).toString()).toBe('PK')
+  expect(first.file.fileID).toMatch(/\/exports\/[0-9a-f]{32}\.xlsx$/) // not guessable
   const second = await as('admin-1', { action: 'exportRecords', instrumentId: 'centrifuge', lang: 'zh' })
   expect(state.deleted).toEqual([first.file.fileID])
   expect(docsOf('users').get('admin-1').data.lastExport).toBe(second.file.fileID)
+
+  // Once downloaded the mini program has it removed.
+  expect(await as('admin-1', { action: 'discardExport', fileID: second.file.fileID })).toEqual({ ok: true })
+  expect(state.deleted).toEqual([first.file.fileID, second.file.fileID])
+  expect(docsOf('users').get('admin-1').data.lastExport).toBeNull()
+})
+
+test('only export files are ever deleted', async () => {
+  await create()
+  await as('admin-1', { action: 'adminLogin', account: 'labadmin', password: 'correct horse' })
+  docsOf('users').get('admin-1').data.lastExport = 'cloud://env/avatars/someone.jpg'
+  expect((await as('admin-1', { action: 'exportRecords', instrumentId: 'centrifuge' })).ok).toBe(true)
+  expect(state.deleted).toEqual([])
 })
 
 test('content check: risky text is refused, an unavailable check lets the booking through', async () => {

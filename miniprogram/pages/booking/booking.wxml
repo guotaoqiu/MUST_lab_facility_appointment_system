@@ -90,7 +90,7 @@
         <view class="bar-clear" hover-class="bar-clear-pressed" bindtap="clearSelection" aria-role="button">{{t.clear}}</view>
         <view class="btn btn-primary bar-book" hover-class="btn-pressed" bindtap="goConfirm" aria-role="button">{{t.book}}</view>
       </block>
-      <text wx:else class="bar-hint {{suspendedText ? 'bar-hint-suspended' : ''}}">{{suspendedText || t.tapHint}}</text>
+      <text wx:else class="bar-hint">{{suspendedText ? t.suspendedHint : t.tapHint}}</text>
     </view>
   </block>
 

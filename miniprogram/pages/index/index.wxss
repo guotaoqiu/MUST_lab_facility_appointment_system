@@ -132,6 +132,14 @@ page {
   transform: rotate(45deg);
 }
 
+.admin-link {
+  align-self: center;
+  margin-top: 36rpx;
+  padding: 12rpx 24rpx;
+  font-size: 26rpx;
+  color: var(--must-blue);
+}
+
 /* Sign-in choice sheet */
 .mask {
   position: fixed;
@@ -174,6 +182,13 @@ page {
   font-size: 32rpx;
   font-weight: 600;
   color: var(--text);
+}
+
+.sheet-note {
+  display: block;
+  margin: -12rpx 8rpx 24rpx;
+  font-size: 26rpx;
+  color: var(--danger);
 }
 
 .choice {

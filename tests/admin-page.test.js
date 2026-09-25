@@ -66,9 +66,19 @@ test('suspending asks for a reason; resuming asks for confirmation', async () =>
   expect((await service.list('centrifuge')).suspended.centrifuge.reason).toBe('離心機維修中')
 
   w.modalAnswer = false
+  const toggles = []
+  const setData = page.instance.setData.bind(page.instance)
+  page.instance.setData = (d, cb) => {
+    if ('switchOn' in d) toggles.push(d.switchOn)
+    return setData(d, cb)
+  }
   page.instance.onSuspendChange({ detail: { value: false } })
   await flush()
   expect(page.instance.data.suspended).toBeTruthy() // kept when the admin says no
+  // The switch had moved to "off"; it is really moved back, not just left as it is.
+  expect(toggles).toEqual([false, true])
+  expect(page.instance.data.switchOn).toBe(true)
+  page.instance.setData = setData
   w.modalAnswer = true
   page.instance.onSuspendChange({ detail: { value: false } })
   await flush()
@@ -106,9 +116,60 @@ test('admins can cancel anyone\'s upcoming booking from the list', async () => {
   expect(text(after)).toContain('管理員取消（admin）')
 })
 
-test('without administrator rights it goes to the administrator sign-in', async () => {
+test('when the instrument broke, its upcoming bookings can be cancelled in one go', async () => {
+  const page = await openAdmin()
+  w.modalContent = '轉子損壞'
+  page.instance.onSuspendChange({ detail: { value: true } })
+  await flush()
+  await flush()
+  await flush()
+  const offer = w.modals[1]
+  expect(offer).toMatchObject({ title: '已暫停預約', confirmText: '全部取消' })
+  expect(offer.content).toMatch(/^此儀器還有 2 個未結束的預約/) // the one on Wednesday has ended
+  await flush()
+  await flush()
+  expect(w.toasts.map((t) => t.title)).toContain('已取消 2 個預約')
+  const cancelled = page.querySelectorAll('.record').filter((r) => text(r).includes('儀器暫停預約：轉子損壞'))
+  expect(cancelled).toHaveLength(2)
+})
+
+test('a list that failed to load offers a retry', async () => {
+  const original = service.adminRecords
+  service.adminRecords = async () => ({ ok: false, code: 'NETWORK_ERROR' })
+  const page = await openAdmin()
+  expect(text(page)).toContain('載入失敗')
+  expect(text(page)).not.toContain('這個月沒有預約記錄')
+  service.adminRecords = original
+  page.querySelector('.retry').dispatchEvent('tap')
+  await flush()
+  await flush()
+  expect(page.querySelectorAll('.record').length).toBeGreaterThan(0)
+})
+
+test('opens on the instrument used last time', async () => {
+  const first = await openAdmin()
+  first.instance.onPickInstrument({ detail: { value: 10 } })
+  await flush()
+  const again = await openAdmin({})
+  expect(again.instance.data.current.id).toBe('carbonation-reactor')
+})
+
+test('without administrator rights it goes to the administrator sign-in, and comes back here', async () => {
   await service.logout()
   await service.login()
-  await openAdmin()
-  expect(w.redirectTo).toEqual(['/pages/login/login?mode=admin'])
+  await openAdmin({ id: 'centrifuge', month: '2026-08' })
+  expect(w.redirectTo).toEqual(['/pages/login/login?mode=admin&next=admin&id=centrifuge&month=2026-08'])
+})
+
+test('an admin sign-in that ended while cancelling: one message, then the sign-in', async () => {
+  const page = await openAdmin()
+  const demo = JSON.parse(w.storage.get('demoState.v2'))
+  demo.users['demo-user'].admin.expiresAt = 1
+  w.storage.set('demoState.v2', JSON.stringify(demo))
+  const other = page.querySelectorAll('.record').find((r) => text(r).includes('Maria Santos'))
+  other.querySelector('.cancel').dispatchEvent('tap')
+  await flush()
+  await flush()
+  expect(w.modals.map((m) => m.content)).toEqual(['確定要取消這個預約嗎？', '需要管理員權限，請重新以管理員登入'])
+  expect(w.redirectTo).toEqual(['/pages/login/login?mode=admin&next=admin&id=centrifuge&month=2026-09'])
 })

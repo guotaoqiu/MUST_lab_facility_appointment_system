@@ -70,7 +70,7 @@ describe('translations', () => {
     // WeChat counts a CJK character as 2 and a Latin one as 1, limit 8.
     const width = (s) => Array.from(s).reduce((n, c) => n + (c.charCodeAt(0) > 0xff ? 2 : 1), 0)
     ;[zh, en].forEach((t) => {
-      ;[t.confirmCancel, t.keepBooking, t.gotIt, t.confirm, t.cancel].forEach((label) => expect(width(label)).toBeLessThanOrEqual(8))
+      ;[t.confirmCancel, t.keepBooking, t.gotIt, t.confirm, t.cancel, t.cancelAll].forEach((label) => expect(width(label)).toBeLessThanOrEqual(8))
     })
   })
 
@@ -84,7 +84,8 @@ describe('translations', () => {
       JSON.stringify(instruments.map((i) => i.name.zh)),
       read('miniprogram/services/local-store.js'),
       read('miniprogram/shared/booking-core.js'),
-      read('miniprogram/pages/index/index.wxml')
+      read('miniprogram/pages/index/index.wxml'),
+      read('README.md')
     ].join('')
     const found = simplifiedOnly.filter((c) => texts.includes(c))
     expect(found).toEqual([])
@@ -110,7 +111,25 @@ describe('formatting', () => {
     expect(i18n.errorMessage('PURPOSE_TOO_LONG', 'en')).toBe('Purpose must be at most 200 characters.')
     expect(i18n.errorMessage('SOMETHING_NEW', 'en')).toBe(en.errors.DEFAULT)
     expect(i18n.errorMessage('INVALID_CREDENTIALS', 'zh', { attemptsLeft: 2 })).toBe('帳號或密碼錯誤，還可以嘗試 2 次')
-    expect(i18n.errorMessage('TOO_MANY_ATTEMPTS', 'en', { retryAfterMin: 15 })).toBe('Too many attempts. Please try again in 15 minutes.')
+    expect(i18n.errorMessage('TOO_MANY_ATTEMPTS', 'en', { retryAfterMin: 15 })).toBe('Too many attempts. Please try again in 15 min.')
+    // Worded so that "1" reads right too.
+    expect(i18n.errorMessage('INVALID_CREDENTIALS', 'en', { attemptsLeft: 1 })).toBe('Wrong account or password. Attempts left: 1.')
+  })
+
+  test('dates and times in another year show the year', () => {
+    expect(i18n.formatDate('2025-09-26', 'zh')).toBe('2025年9月26日（週五）')
+    expect(i18n.formatDate('2025-09-26', 'en')).toBe('Fri, 26 Sep 2025')
+    expect(i18n.formatTimestamp(Date.parse('2025-12-31T10:00:00+08:00'), 'zh')).toBe('2025年12月31日 10:00')
+    expect(i18n.formatTimestamp(Date.parse('2025-12-31T10:00:00+08:00'), 'en')).toBe('31 Dec 2025 10:00')
+    expect(i18n.formatTimestamp(Date.parse('2026-09-25T10:40:00+08:00'), 'zh')).toBe('9月25日 10:40')
+  })
+
+  test('English text uses English brackets and punctuation', () => {
+    const records = require('../miniprogram/utils/records')
+    const r = { id: 'x', instrumentId: 'centrifuge', date: '2026-09-28', startMin: 600, endMin: 660, status: 'cancelled', cancelledBy: 'admin', cancelledByName: 'admin', cancelReason: 'suspended', suspendReason: 'broken' }
+    expect(records.viewRecord(r, 'en', { title: 'date', admin: true }).cancelNote).toBe('Cancelled by admin (admin) · instrument suspended: broken')
+    expect(records.viewRecord(r, 'zh', { title: 'date', admin: true }).cancelNote).toBe('管理員取消（admin） · 儀器暫停預約：broken')
+    expect(JSON.stringify(en)).not.toMatch(/[（）：，。]/)
   })
 
   test('language follows the saved choice, then the WeChat language', () => {

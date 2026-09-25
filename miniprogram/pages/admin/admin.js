@@ -6,6 +6,8 @@ const session = require('../../utils/session')
 const records = require('../../utils/records')
 const service = require('../../services/booking')
 
+const LAST_KEY = 'adminInstrument'
+
 function currentMonth() {
   return core.localNow(clock.now()).date.slice(0, 7)
 }
@@ -16,7 +18,8 @@ function shiftMonth(month, step) {
   return Math.floor(total / 12) + '-' + core.pad2((total % 12) + 1)
 }
 
-// ?id=<instrument> — all bookings of one instrument, suspend switch, Excel export.
+// ?id=<instrument>&month=YYYY-MM — all bookings of one instrument, suspend
+// switch, Excel export. Without an id: the instrument used here last time.
 Component({
   data: {
     lang: 'zh',
@@ -30,24 +33,39 @@ Component({
     summaryText: '',
     suspended: null,
     suspendedText: '',
+    switchOn: false, // follows the switch as shown, so it can be flipped back
     loading: false,
+    loadError: false,
     busy: false,
     exporting: false
   },
 
   methods: {
     onLoad(query) {
-      const index = Math.max(0, instruments.findIndex((i) => i.id === (query && query.id)))
-      this.setData({ index, month: currentMonth() })
+      query = query || {}
+      let id = query.id
+      if (!id) {
+        try {
+          id = wx.getStorageSync(LAST_KEY)
+        } catch (e) {}
+      }
+      const index = Math.max(0, instruments.findIndex((i) => i.id === id))
+      this.setData({ index, month: core.isMonthString(query.month) ? query.month : currentMonth() })
     },
 
     onShow() {
       if (!session.isAdmin()) {
-        wx.redirectTo({ url: '/pages/login/login?mode=admin' })
+        this.toAdminLogin()
         return
       }
       this.applyLang()
       this.load()
+    },
+
+    // Sign in as administrator again, then come back to this instrument and month.
+    toAdminLogin() {
+      const id = instruments[this.data.index].id
+      wx.redirectTo({ url: '/pages/login/login?mode=admin&next=admin&id=' + id + '&month=' + this.data.month })
     },
 
     onPullDownRefresh() {
@@ -83,6 +101,7 @@ Component({
         records: res.records.map((r) => records.viewRecord(r, lang, { title: 'date', admin: true })),
         summaryText: s.total ? i18n.format(t.summary, s) : '',
         suspended: res.suspended,
+        switchOn: !!res.suspended,
         suspendedText: res.suspended
           ? (res.suspended.reason ? res.suspended.reason + ' · ' : '') + i18n.format(t.suspendedSince, { time: i18n.formatTimestamp(res.suspended.since, lang) })
           : ''
@@ -93,13 +112,23 @@ Component({
       const id = this.data.current.id || instruments[this.data.index].id
       const month = this.data.month
       const seq = (this.seq = (this.seq || 0) + 1)
-      this.setData({ loading: true })
+      this.setData({ loading: true, loadError: false })
       const res = await service.adminRecords(id, month)
       if (seq !== this.seq) return
       this.setData({ loading: false })
-      if (!res.ok) return this.fail(res)
+      if (!res.ok) {
+        if (res.code === 'ADMIN_REQUIRED') return this.fail(res)
+        // Keep what is shown; with nothing shown, offer a retry.
+        if (this.result) wx.showToast({ title: i18n.errorMessage(res.code, this.data.lang), icon: 'none' })
+        else this.setData({ loadError: true })
+        return
+      }
       this.result = res
       this.render()
+    },
+
+    retry() {
+      this.load()
     },
 
     // Lost admin rights (e.g. the week-long sign-in expired): sign in again.
@@ -111,14 +140,18 @@ Component({
         showCancel: false,
         confirmText: t.gotIt,
         success: () => {
-          if (res.code === 'ADMIN_REQUIRED') wx.redirectTo({ url: '/pages/login/login?mode=admin' })
+          if (res.code === 'ADMIN_REQUIRED') this.toAdminLogin()
         }
       })
     },
 
     onPickInstrument(e) {
+      const index = Number(e.detail.value)
+      try {
+        wx.setStorageSync(LAST_KEY, instruments[index].id)
+      } catch (err) {}
       this.result = null
-      this.setData({ index: Number(e.detail.value), records: [], summaryText: '' })
+      this.setData({ index, records: [], summaryText: '', suspended: null, switchOn: false })
       this.applyLang()
       this.load()
     },
@@ -140,7 +173,10 @@ Component({
     onSuspendChange(e) {
       const t = this.data.t
       const suspend = e.detail.value
-      const revert = () => this.setData({ suspended: this.data.suspended ? Object.assign({}, this.data.suspended) : null })
+      // The switch has already moved; record that, so that moving it back is
+      // a real change the switch receives.
+      this.setData({ switchOn: suspend })
+      const revert = () => this.setData({ switchOn: !suspend })
       const apply = async (reason) => {
         this.setData({ busy: true })
         const res = await service.setSuspended(this.data.current.id, suspend, reason || '')
@@ -149,7 +185,8 @@ Component({
           revert()
           return this.fail(res)
         }
-        this.load()
+        await this.load()
+        if (suspend && res.upcoming) this.offerCancelUpcoming(res.upcoming, reason || '')
       }
       if (suspend) {
         wx.showModal({
@@ -173,6 +210,28 @@ Component({
       }
     },
 
+    // The instrument is out of service: its bookings that have not ended yet
+    // can be cancelled in one go (the bookers see why).
+    offerCancelUpcoming(count, reason) {
+      const t = this.data.t
+      wx.showModal({
+        title: t.suspendedTitle,
+        content: i18n.format(t.cancelUpcomingPrompt, { n: count }),
+        confirmText: t.cancelAll,
+        confirmColor: '#d14343',
+        cancelText: t.keepBooking,
+        success: async (r) => {
+          if (!r.confirm) return
+          wx.showLoading({ title: '', mask: true })
+          const res = await service.cancelUpcoming(this.data.current.id, reason)
+          wx.hideLoading()
+          if (!res.ok) return this.fail(res)
+          wx.showToast({ title: i18n.format(t.cancelledCount, { n: res.cancelled }), icon: 'none' })
+          this.load()
+        }
+      })
+    },
+
     onCancel(e) {
       const item = e.detail.item
       const t = this.data.t
@@ -189,7 +248,7 @@ Component({
           wx.hideLoading()
           if (res.ok) wx.showToast({ title: t.cancelled, icon: 'success' })
           else this.fail(res)
-          this.load()
+          if (res.code !== 'ADMIN_REQUIRED') this.load() // otherwise it is leaving for the sign-in
         }
       })
     },

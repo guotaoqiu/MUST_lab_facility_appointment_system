@@ -29,7 +29,7 @@ test('shows who is signed in and their upcoming bookings; cancelled ones move to
   await make()
   const b = (await make({ instrumentId: 'ball-mill', date: '2026-09-26', startMin: 900, endMin: 990 })).booking
   const page = await openSettings()
-  expect(w.titles).toContain('設置')
+  expect(w.titles).toContain('設定')
   expect(text(page.querySelector('.profile'))).toContain('小明')
   expect(text(page.querySelector('.profile'))).toContain('微信用戶')
 
@@ -61,6 +61,44 @@ test('no bookings yet', async () => {
   expect(text(page)).toContain('沒有即將到來的預約')
 })
 
+test('a list that failed to load says so and can be retried', async () => {
+  const original = service.myBookings
+  service.myBookings = async () => ({ ok: false, code: 'NETWORK_ERROR' })
+  const page = await openSettings()
+  expect(text(page)).toContain('載入失敗')
+  expect(text(page)).not.toContain('沒有即將到來的預約')
+  service.myBookings = original
+  page.querySelector('.retry').dispatchEvent('tap')
+  await flush()
+  await flush()
+  expect(text(page)).toContain('沒有即將到來的預約')
+})
+
+test('a booking on an instrument that went out of service is marked', async () => {
+  await make()
+  await service.adminLogin('admin', 'admin123')
+  await service.setSuspended('centrifuge', true, '轉子損壞')
+  const page = await openSettings()
+  expect(text(page.querySelector('.record'))).toContain('儀器暫停使用：轉子損壞')
+})
+
+test('bookings cancelled because the instrument broke say so', async () => {
+  await make()
+  await service.adminLogin('admin', 'admin123')
+  await service.cancelUpcoming('centrifuge', '轉子損壞')
+  const page = await openSettings()
+  page.querySelectorAll('.tab')[1].dispatchEvent('tap')
+  await flush()
+  expect(text(page.querySelector('.record'))).toContain('管理員取消 · 儀器暫停預約：轉子損壞')
+})
+
+test('tapping the profile opens the photo and nickname editor', async () => {
+  const page = await openSettings()
+  page.querySelector('.profile').dispatchEvent('tap')
+  await flush()
+  expect(w.navigateTo).toEqual(['/pages/login/login?mode=user&edit=1&next=back'])
+})
+
 test('the language can be switched here', async () => {
   const page = await openSettings()
   page.querySelector('#lang').querySelectorAll('.opt')[1].dispatchEvent('tap')
@@ -79,21 +117,45 @@ test('users can switch to administrator sign-in; administrators get Booking Admi
 
   await service.adminLogin('admin', 'admin123')
   const admin = await openSettings()
+  expect(text(admin.querySelector('.profile'))).toContain('小明')
   expect(text(admin.querySelector('.profile'))).toContain('管理員 · admin')
   admin.querySelectorAll('.row').find((r) => text(r).includes('預約管理')).dispatchEvent('tap')
   await flush()
   expect(w.navigateTo[1]).toBe('/pages/admin/admin')
 })
 
-test('signing out goes back to the home page and ends the admin sign-in', async () => {
+test('signing out goes back to the home page and ends both sign-ins', async () => {
   await service.adminLogin('admin', 'admin123')
   const page = await openSettings()
-  page.querySelectorAll('.row').find((r) => text(r).includes('退出登入')).dispatchEvent('tap')
+  page.querySelectorAll('.row').find((r) => text(r).includes('登出')).dispatchEvent('tap')
   await flush()
   await flush()
   expect(w.reLaunch).toEqual(['/pages/index/index'])
   expect(session.get()).toBeNull()
-  expect((await service.me()).me.isAdmin).toBe(false)
+  expect((await service.me()).me).toMatchObject({ isAdmin: false, loggedIn: false })
+})
+
+test('if signing out fails, it says so and stays signed in', async () => {
+  const original = service.logout
+  service.logout = async () => ({ ok: false, code: 'NETWORK_ERROR' })
+  const page = await openSettings()
+  page.querySelectorAll('.row').find((r) => text(r).includes('登出')).dispatchEvent('tap')
+  await flush()
+  await flush()
+  service.logout = original
+  expect(w.reLaunch).toEqual([])
+  expect(w.modals.map((m) => m.content)).toContain('網絡連接失敗，請稍後再試')
+  expect(session.get()).toMatchObject({ nickname: '小明' })
+})
+
+test('an administrator without a WeChat profile is shown once by account', async () => {
+  session.clear()
+  // A fresh phone: only the administrator sign-in.
+  w.storage.delete('demoState.v2')
+  await service.adminLogin('admin', 'admin123')
+  const page = await openSettings()
+  expect(text(page.querySelector('.profile-name'))).toBe('admin')
+  expect(text(page.querySelector('.role'))).toBe('管理員')
 })
 
 test('without a session it asks to sign in', async () => {

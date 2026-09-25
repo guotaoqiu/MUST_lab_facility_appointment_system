@@ -1,13 +1,25 @@
 const core = require('../../shared/booking-core')
 const i18n = require('../../utils/i18n')
+const session = require('../../utils/session')
 const service = require('../../services/booking')
 
+// Where to go back to after signing in again on the admin page.
+function adminQuery(query) {
+  const parts = []
+  if (/^[a-z0-9-]+$/.test(query.id || '')) parts.push('id=' + query.id)
+  if (core.isMonthString(query.month)) parts.push('month=' + query.month)
+  return parts.length ? '?' + parts.join('&') : ''
+}
+
 // ?mode=user (WeChat) or ?mode=admin (account + password)
-// ?next=back returns to the previous page instead of opening the booking system.
+// ?edit=1 (user mode) changes the photo and nickname of a signed-in user.
+// After signing in: the booking system, or with ?next=back the previous page,
+// or with ?next=admin the admin page (&id=&month= as it was).
 Component({
   data: {
     mode: 'user',
     step: 'start', // user mode: 'start' -> 'profile' (first time only)
+    edit: false,
     lang: 'zh',
     t: {},
     avatar: '',
@@ -25,8 +37,13 @@ Component({
     onLoad(query) {
       query = query || {}
       this.next = query.next
+      this.adminQuery = adminQuery(query)
       const mode = query.mode === 'admin' ? 'admin' : 'user'
       this.setData({ mode })
+      const current = session.get()
+      if (mode === 'user' && query.edit === '1' && current) {
+        this.setData({ step: 'profile', edit: true, nickname: current.nickname || '', avatar: current.avatar || '' })
+      }
       this.applyLang()
       if (mode === 'user' && wx.onNeedPrivacyAuthorization) {
         wx.onNeedPrivacyAuthorization((resolve) => {
@@ -43,7 +60,7 @@ Component({
     applyLang() {
       const lang = i18n.getLang()
       const t = i18n.dict(lang)
-      wx.setNavigationBarTitle({ title: this.data.mode === 'admin' ? t.navAdminLogin : t.navUserLogin })
+      wx.setNavigationBarTitle({ title: this.data.mode === 'admin' ? t.navAdminLogin : this.data.edit ? t.navEditProfile : t.navUserLogin })
       this.setData({
         lang,
         t,
@@ -52,7 +69,11 @@ Component({
     },
 
     finish() {
-      if (this.next === 'back') wx.navigateBack()
+      if (this.data.edit) {
+        wx.showToast({ title: this.data.t.saved, icon: 'success' })
+        wx.navigateBack()
+      } else if (this.next === 'back') wx.navigateBack()
+      else if (this.next === 'admin') wx.redirectTo({ url: '/pages/admin/admin' + this.adminQuery })
       else wx.redirectTo({ url: '/pages/booking/booking' })
     },
 
@@ -78,23 +99,39 @@ Component({
     },
 
     onChooseAvatar(e) {
-      if (e.detail && e.detail.avatarUrl) this.setData({ avatar: e.detail.avatarUrl })
+      if (e.detail && e.detail.avatarUrl) {
+        this.avatarPicked = true
+        this.setData({ avatar: e.detail.avatarUrl })
+      }
     },
 
     onNickname(e) {
       if (e.detail && typeof e.detail.value === 'string') this.setData({ nickname: e.detail.value, error: '' })
     },
 
-    // Step 2 (first time): save the nickname and photo.
-    async onSaveProfile() {
+    // WeChat checks the nickname after the field loses focus and empties it
+    // when the check fails.
+    onNicknameReview(e) {
+      if (e.detail && e.detail.pass === false) {
+        this.setData({ nickname: '' })
+        this.showError({ code: 'NICKNAME_REJECTED' })
+      }
+    },
+
+    // Step 2 (first time, or ?edit=1): save the nickname and photo. Submitted
+    // as a form, which reads the nickname field as it is at that moment
+    // (picking WeChat's suggested nickname does not always send an input event).
+    async onSaveProfile(e) {
       if (this.data.busy) return
-      const nickname = core.cleanText(this.data.nickname)
+      const form = e && e.detail && e.detail.value
+      const nickname = core.cleanText(form && typeof form.nickname === 'string' ? form.nickname : this.data.nickname)
       if (!nickname) {
         this.showError({ code: 'NICKNAME_REQUIRED' })
         return
       }
-      this.setData({ busy: true, error: '' })
-      const avatar = this.data.avatar ? await service.uploadAvatar(this.data.avatar) : ''
+      this.setData({ busy: true, error: '', nickname })
+      // Without a new photo the saved one is kept (also if the upload fails).
+      const avatar = this.avatarPicked ? (await service.uploadAvatar(this.data.avatar)) || undefined : undefined
       const res = await service.login({ nickname, avatar })
       this.setData({ busy: false })
       if (!res.ok) {

@@ -25,6 +25,7 @@
       </view>
       <view class="entry-arrow"></view>
     </view>
+    <text wx:if="{{session && session.role === 'user'}}" class="admin-link" bindtap="goAdminLogin" aria-role="button">{{t.adminLogin}}</text>
   </view>
 </view>
 
@@ -32,6 +33,7 @@
 <view class="mask {{choiceOpen ? 'mask-show' : ''}}" bindtap="closeChoice" catchtouchmove="noop"></view>
 <view class="sheet {{choiceOpen ? 'sheet-show' : ''}}" catchtouchmove="noop">
   <text class="sheet-title">{{t.loginChoiceTitle}}</text>
+  <text wx:if="{{expired}}" class="sheet-note">{{t.loginExpired}}</text>
   <view class="choice" hover-class="choice-pressed" data-mode="user" bindtap="chooseLogin" aria-role="button">
     <view class="choice-icon choice-icon-user"><view class="glyph-user"></view></view>
     <view class="choice-text">

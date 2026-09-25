@@ -7,6 +7,9 @@ const i18n = require('../miniprogram/utils/i18n')
 const session = require('../miniprogram/utils/session')
 const service = require('../miniprogram/services/booking')
 
+// The sign-in choice waits a moment after closing the sheet before it navigates.
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
 let w
 beforeEach(() => {
   w = installWx()
@@ -56,20 +59,28 @@ describe('home page', () => {
     page.querySelectorAll('.choice')[0].dispatchEvent('tap')
     page.querySelectorAll('.choice')[1].dispatchEvent('tap') // a second quick tap is ignored
     await flush()
-    expect(w.navigateTo).toEqual(['/pages/login/login?mode=user'])
     expect(page.instance.data.choiceOpen).toBe(false)
+    expect(w.navigateTo).toEqual([]) // not in the same moment as closing the sheet
+    await wait(150)
+    expect(w.navigateTo).toEqual(['/pages/login/login?mode=user'])
 
     page.instance.onShow()
     page.querySelector('.entry').dispatchEvent('tap')
     await flush()
     page.querySelectorAll('.choice')[1].dispatchEvent('tap')
-    await flush()
+    await wait(150)
     expect(w.navigateTo[1]).toBe('/pages/login/login?mode=admin')
   })
 
   test('signed in: straight to the booking system; the name chip opens Settings', async () => {
     await service.login({ nickname: '小明' })
     const page = await openHome()
+    // Administrator sign-in is still one tap away for WeChat users.
+    page.querySelector('.admin-link').dispatchEvent('tap')
+    await flush()
+    expect(w.navigateTo).toEqual(['/pages/login/login?mode=admin'])
+    w.navigateTo.length = 0
+    page.instance.onShow()
     expect(text(page.querySelector('.me'))).toContain('小明')
     page.querySelector('.entry').dispatchEvent('tap')
     page.querySelector('.entry').dispatchEvent('tap') // a quick double tap opens it once
@@ -84,9 +95,21 @@ describe('home page', () => {
   test('pages that need a sign-in open the choice with ?login=1', async () => {
     const page = await openHome({ login: '1' })
     expect(page.instance.data.choiceOpen).toBe(true)
+    expect(text(page)).not.toContain('登入已過期')
     page.instance.closeChoice()
     await flush()
     expect(page.instance.data.choiceOpen).toBe(false)
+  })
+
+  test('an ended sign-in is explained', async () => {
+    const page = await openHome({ login: '1', expired: '1' })
+    expect(text(page.querySelector('.sheet'))).toContain('登入已過期，請重新登入')
+  })
+
+  test('administrators do not get the extra administrator link', async () => {
+    await service.adminLogin('admin', 'admin123')
+    const page = await openHome()
+    expect(page.querySelector('.admin-link')).toBeUndefined()
   })
 })
 
@@ -101,16 +124,42 @@ describe('user sign-in (WeChat)', () => {
     await flush()
     expect(page.instance.data.step).toBe('profile')
 
-    await page.instance.onSaveProfile()
+    await page.instance.onSaveProfile({ detail: { value: { nickname: '' } } })
     await flush()
     expect(text(page)).toContain('請輸入暱稱')
 
     page.instance.onChooseAvatar({ detail: { avatarUrl: 'http://tmp/a.jpg' } })
-    page.instance.onNickname({ detail: { value: ' 小明 ' } })
-    await page.instance.onSaveProfile()
+    // The form is read when it is submitted, even without an input event
+    // (e.g. after picking the nickname WeChat suggests).
+    await page.instance.onSaveProfile({ detail: { value: { nickname: ' 小明 ' } } })
     expect(w.redirectTo).toEqual(['/pages/booking/booking'])
     expect(session.get()).toMatchObject({ role: 'user', nickname: '小明' })
     expect(session.get().avatar).toMatch(/^wxfile:\/\/usr\/avatar-/) // kept on the phone in demo mode
+  })
+
+  test('a nickname WeChat rejects is cleared and not submitted', async () => {
+    const page = await openLogin({ mode: 'user' })
+    await page.instance.onWechatLogin()
+    page.instance.onNickname({ detail: { value: 'bad' } })
+    page.instance.onNicknameReview({ detail: { pass: false, timeout: false } })
+    await flush()
+    expect(page.instance.data.nickname).toBe('')
+    expect(text(page)).toContain('這個暱稱未通過微信檢查，請換一個')
+    await page.instance.onSaveProfile({ detail: { value: { nickname: '' } } })
+    expect(w.redirectTo).toEqual([])
+  })
+
+  test('the photo and nickname can be changed later (from Settings)', async () => {
+    await service.login({ nickname: '小明', avatar: 'wxfile://usr/old.jpg' })
+    const page = await openLogin({ mode: 'user', edit: '1', next: 'back' })
+    expect(w.titles).toContain('修改資料')
+    expect(page.instance.data.step).toBe('profile')
+    expect(page.instance.data.nickname).toBe('小明')
+    expect(text(page)).toContain('儲存')
+    await page.instance.onSaveProfile({ detail: { value: { nickname: '小明明' } } })
+    expect(w.navigateBack).toBe(1)
+    expect(w.toasts.map((t) => t.title)).toContain('已儲存')
+    expect(session.get()).toMatchObject({ nickname: '小明明', avatar: 'wxfile://usr/old.jpg' }) // the photo is kept
   })
 
   test('returning users go straight in', async () => {
@@ -157,6 +206,14 @@ describe('administrator sign-in', () => {
     expect(w.redirectTo).toEqual(['/pages/booking/booking'])
     expect(session.get()).toMatchObject({ role: 'admin', account: 'admin' })
     expect(page.instance.data.password).toBe('')
+  })
+
+  test('signing in again from the admin page returns to it', async () => {
+    const page = await openLogin({ mode: 'admin', next: 'admin', id: 'centrifuge', month: '2026-08' })
+    page.instance.onAccount({ detail: { value: 'admin' } })
+    page.instance.onPassword({ detail: { value: 'admin123' } })
+    await page.instance.onAdminLogin()
+    expect(w.redirectTo).toEqual(['/pages/admin/admin?id=centrifuge&month=2026-08'])
   })
 
   test('from Settings it returns there', async () => {

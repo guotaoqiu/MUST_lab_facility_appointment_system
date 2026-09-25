@@ -1,4 +1,5 @@
 const core = require('../shared/booking-core')
+const clock = require('./clock')
 
 const DICTS = {
   zh: require('../i18n/zh'),
@@ -53,11 +54,17 @@ function weekdayShort(date, lang) {
   return dict(lang).weekdays[core.weekdayOf(date)]
 }
 
-/** 9月26日（週六） / Sat, 26 Sep */
+// Dates in another year than now show the year.
+function otherYear(y) {
+  return String(y) !== core.localNow(clock.now()).date.slice(0, 4)
+}
+
+/** 9月26日（週六） / Sat, 26 Sep; 2025年9月26日（週五） / Fri, 26 Sep 2025 */
 function formatDate(date, lang) {
   const p = parts(date)
-  if ((lang || getLang()) === 'zh') return p.m + '月' + p.d + '日（週' + dict('zh').weekdays[p.wd] + '）'
-  return dict('en').weekdays[p.wd] + ', ' + p.d + ' ' + MONTHS_EN[p.m - 1]
+  const year = otherYear(p.y)
+  if ((lang || getLang()) === 'zh') return (year ? p.y + '年' : '') + p.m + '月' + p.d + '日（週' + dict('zh').weekdays[p.wd] + '）'
+  return dict('en').weekdays[p.wd] + ', ' + p.d + ' ' + MONTHS_EN[p.m - 1] + (year ? ' ' + p.y : '')
 }
 
 /** 9/21 – 9/27 / 21 – 27 Sep / 28 Sep – 4 Oct */
@@ -95,14 +102,15 @@ function errorMessage(code, lang, res) {
   return format(t.errors[code] || t.errors.DEFAULT, { n })
 }
 
-/** 2026-09-25 10:40 -> 9月25日 10:40 / 25 Sep 10:40 */
+/** 2026-09-25 10:40 -> 9月25日 10:40 / 25 Sep 10:40 (with the year if not this year) */
 function formatTimestamp(ms, lang) {
   if (!ms) return ''
   const t = core.localNow(ms)
   const p = parts(t.date)
+  const year = otherYear(p.y)
   const time = core.minutesToText(t.minutes)
-  if ((lang || getLang()) === 'zh') return p.m + '月' + p.d + '日 ' + time
-  return p.d + ' ' + MONTHS_EN[p.m - 1] + ' ' + time
+  if ((lang || getLang()) === 'zh') return (year ? p.y + '年' : '') + p.m + '月' + p.d + '日 ' + time
+  return p.d + ' ' + MONTHS_EN[p.m - 1] + (year ? ' ' + p.y : '') + ' ' + time
 }
 
 /** 2026-09 -> 2026年9月 / Sep 2026 */

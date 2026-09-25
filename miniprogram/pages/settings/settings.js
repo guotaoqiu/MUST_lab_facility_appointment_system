@@ -8,9 +8,10 @@ function profileOf(s, t) {
   const admin = s.role === 'admin'
   return {
     avatar: s.avatar,
-    name: admin && !s.nickname ? s.account : s.nickname,
+    // An administrator without a WeChat profile is shown by account name.
+    name: s.nickname || s.account,
     role: s.role,
-    roleText: admin ? t.roleAdmin + ' · ' + s.account : t.roleUser
+    roleText: admin ? (s.nickname ? t.roleAdmin + ' · ' + s.account : t.roleAdmin) : t.roleUser
   }
 }
 
@@ -24,7 +25,8 @@ Component({
     history: [],
     items: [], // the list of the selected tab
     loading: false,
-    loaded: false
+    loaded: false,
+    loadError: false // the first load failed
   },
 
   methods: {
@@ -61,20 +63,26 @@ Component({
     },
 
     async load() {
-      this.setData({ loading: true })
+      this.setData({ loading: true, loadError: false })
       const res = await service.myBookings()
       this.setData({ loading: false })
       if (!res.ok) {
-        wx.showToast({ title: i18n.errorMessage(res.code, this.data.lang), icon: 'none' })
+        // Keep showing what was loaded before; without it, offer a retry.
+        if (this.data.loaded) wx.showToast({ title: i18n.errorMessage(res.code, this.data.lang), icon: 'none' })
+        else this.setData({ loadError: true })
         return
       }
       if (!session.get()) {
-        wx.reLaunch({ url: '/pages/index/index?login=1' })
+        wx.reLaunch({ url: '/pages/index/index?login=1&expired=1' })
         return
       }
       this.result = res
       this.setData({ loaded: true, profile: profileOf(session.get(), this.data.t) })
       this.render()
+    },
+
+    retry() {
+      this.load()
     },
 
     switchTab(e) {
@@ -127,6 +135,10 @@ Component({
       this.navigate('/pages/login/login?mode=admin&next=back')
     },
 
+    editProfile() {
+      this.navigate('/pages/login/login?mode=user&edit=1&next=back')
+    },
+
     onLogout() {
       const t = this.data.t
       wx.showModal({
@@ -136,7 +148,14 @@ Component({
         cancelText: t.cancel,
         success: async (r) => {
           if (!r.confirm) return
-          await service.logout()
+          wx.showLoading({ title: '', mask: true })
+          const res = await service.logout()
+          wx.hideLoading()
+          if (!res.ok) {
+            // Still signed in on the server: say so instead of pretending.
+            wx.showModal({ title: t.noticeTitle, content: i18n.errorMessage(res.code, this.data.lang), showCancel: false, confirmText: t.gotIt })
+            return
+          }
           wx.reLaunch({ url: '/pages/index/index' })
         }
       })

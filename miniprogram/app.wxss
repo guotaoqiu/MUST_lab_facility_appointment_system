@@ -69,3 +69,26 @@ page {
 .btn-danger.btn-pressed {
   background: #f2f4f7;
 }
+
+/* A list that failed to load, with a retry button. */
+.load-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 56rpx 32rpx;
+  font-size: 26rpx;
+  color: var(--danger);
+}
+
+.retry {
+  margin-top: 20rpx;
+  padding: 10rpx 40rpx;
+  border: 1rpx solid var(--must-blue);
+  border-radius: 999rpx;
+  font-size: 26rpx;
+  color: var(--must-blue);
+}
+
+.retry-pressed {
+  background: var(--must-blue-soft);
+}

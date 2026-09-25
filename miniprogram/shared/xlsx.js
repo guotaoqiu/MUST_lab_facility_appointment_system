@@ -2,10 +2,12 @@
  * Minimal .xlsx writer with no dependencies, so the same code runs in the
  * cloud function and on the phone (demo mode).
  *
- *   buildXlsx({ sheetName, columns: [{ header, width }], rows: [[cell, ...]] })
+ *   buildXlsx({ sheetName, columns: [{ header, width, type }], rows: [[cell, ...]] })
  *     -> Uint8Array
  *
- * Cells are strings or numbers; the header row is bold and frozen.
+ * Cells are strings or numbers; the header row is bold and frozen. A column's
+ * `type` turns its text into real Excel values, so dates sort and filter:
+ *   'date' ('2026-09-28'), 'time' ('10:30'), 'datetime' ('2026-09-28 10:30').
  * The file is a ZIP archive with stored (uncompressed) entries.
  */
 
@@ -25,23 +27,52 @@ function crc32(bytes) {
   return (crc ^ 0xffffffff) >>> 0
 }
 
+// UTF-8 bytes of a string; a lone surrogate becomes U+FFFD, like Buffer does.
 function utf8(str) {
-  const out = []
+  if (typeof Buffer !== 'undefined') {
+    const buf = Buffer.from(str, 'utf8')
+    return new Uint8Array(buf.buffer, buf.byteOffset, buf.length)
+  }
+  // The mini program (demo mode) has no Buffer: size first, then fill.
+  let size = 0
+  for (let i = 0; i < str.length; i++) {
+    const code = str.charCodeAt(i)
+    if (code < 0x80) size += 1
+    else if (code < 0x800) size += 2
+    else if (isPair(str, i)) {
+      size += 4
+      i++
+    } else size += 3
+  }
+  const out = new Uint8Array(size)
+  let p = 0
   for (let i = 0; i < str.length; i++) {
     let code = str.charCodeAt(i)
-    if (code >= 0xd800 && code <= 0xdbff && i + 1 < str.length) {
-      const next = str.charCodeAt(i + 1)
-      if (next >= 0xdc00 && next <= 0xdfff) {
-        code = 0x10000 + ((code - 0xd800) << 10) + (next - 0xdc00)
-        i++
-      }
+    if (isPair(str, i)) {
+      code = 0x10000 + ((code - 0xd800) << 10) + (str.charCodeAt(i + 1) - 0xdc00)
+      i++
+    } else if (code >= 0xd800 && code <= 0xdfff) code = 0xfffd
+    if (code < 0x80) out[p++] = code
+    else if (code < 0x800) {
+      out[p++] = 0xc0 | (code >> 6)
+      out[p++] = 0x80 | (code & 63)
+    } else if (code < 0x10000) {
+      out[p++] = 0xe0 | (code >> 12)
+      out[p++] = 0x80 | ((code >> 6) & 63)
+      out[p++] = 0x80 | (code & 63)
+    } else {
+      out[p++] = 0xf0 | (code >> 18)
+      out[p++] = 0x80 | ((code >> 12) & 63)
+      out[p++] = 0x80 | ((code >> 6) & 63)
+      out[p++] = 0x80 | (code & 63)
     }
-    if (code < 0x80) out.push(code)
-    else if (code < 0x800) out.push(0xc0 | (code >> 6), 0x80 | (code & 63))
-    else if (code < 0x10000) out.push(0xe0 | (code >> 12), 0x80 | ((code >> 6) & 63), 0x80 | (code & 63))
-    else out.push(0xf0 | (code >> 18), 0x80 | ((code >> 12) & 63), 0x80 | ((code >> 6) & 63), 0x80 | (code & 63))
   }
-  return new Uint8Array(out)
+  return out
+}
+
+function isPair(str, i) {
+  const code = str.charCodeAt(i)
+  return code >= 0xd800 && code <= 0xdbff && i + 1 < str.length && (str.charCodeAt(i + 1) & 0xfc00) === 0xdc00
 }
 
 function zip(files) {
@@ -103,13 +134,20 @@ function zip(files) {
   return out
 }
 
+// XML 1.0 only allows tab, LF, CR, U+0020–U+D7FF, U+E000–U+FFFD and
+// U+10000 and up; anything else (control characters, lone surrogates,
+// U+FFFE/U+FFFF) would make Excel reject the whole file, so it is dropped.
 function escapeXml(value) {
-  return String(value)
-    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
+  let out = ''
+  for (const ch of String(value)) {
+    const c = ch.codePointAt(0)
+    if (c === 0x26) out += '&amp;'
+    else if (c === 0x3c) out += '&lt;'
+    else if (c === 0x3e) out += '&gt;'
+    else if (c === 0x22) out += '&quot;'
+    else if (c === 0x9 || c === 0xa || c === 0xd || (c >= 0x20 && c <= 0xd7ff) || (c >= 0xe000 && c <= 0xfffd) || c >= 0x10000) out += ch
+  }
+  return out
 }
 
 function columnName(index) {
@@ -118,7 +156,24 @@ function columnName(index) {
   return name
 }
 
-function cellXml(value, ref, style) {
+const EXCEL_EPOCH = Date.UTC(1899, 11, 30) // day 0 of Excel's date numbers
+const DAY_MS = 24 * 60 * 60 * 1000
+// Style index of each column type (see styles.xml below); 1 is the header.
+const TYPE_STYLES = { date: 2, time: 3, datetime: 4 }
+
+/** '2026-09-28', '10:30' or '2026-09-28 10:30' as an Excel date number, or null. */
+function excelValue(value, type) {
+  const m = /^(?:(\d{4})-(\d{2})-(\d{2}))? ?(?:(\d{2}):(\d{2}))?$/.exec(typeof value === 'string' ? value : '')
+  if (!m || (type !== 'time') !== !!m[1] || (type !== 'date') !== !!m[4]) return null
+  const days = m[1] ? (Date.UTC(+m[1], +m[2] - 1, +m[3]) - EXCEL_EPOCH) / DAY_MS : 0
+  return days + (m[4] ? (+m[4] * 60 + +m[5]) / 1440 : 0)
+}
+
+function cellXml(value, ref, style, type) {
+  if (TYPE_STYLES[type]) {
+    const number = excelValue(value, type)
+    if (number != null) return '<c r="' + ref + '" s="' + TYPE_STYLES[type] + '"><v>' + number + '</v></c>'
+  }
   const s = style ? ' s="' + style + '"' : ''
   if (typeof value === 'number' && isFinite(value)) return '<c r="' + ref + '"' + s + '><v>' + value + '</v></c>'
   if (value == null || value === '') return ''
@@ -138,7 +193,10 @@ const NS_PKG_REL = 'http://schemas.openxmlformats.org/package/2006/relationships
 function buildXlsx({ sheetName, columns, rows }) {
   const header = '<row r="1">' + columns.map((c, i) => cellXml(c.header, columnName(i) + '1', 1)).join('') + '</row>'
   const body = rows
-    .map((row, r) => '<row r="' + (r + 2) + '">' + row.map((v, i) => cellXml(v, columnName(i) + (r + 2), 0)).join('') + '</row>')
+    .map(
+      (row, r) =>
+        '<row r="' + (r + 2) + '">' + row.map((v, i) => cellXml(v, columnName(i) + (r + 2), 0, columns[i] && columns[i].type)).join('') + '</row>'
+    )
     .join('')
   const cols =
     '<cols>' +
@@ -191,13 +249,18 @@ function buildXlsx({ sheetName, columns, rows }) {
       name: 'xl/styles.xml',
       xml:
         '<styleSheet xmlns="' + NS_MAIN + '">' +
+        '<numFmts count="3"><numFmt numFmtId="164" formatCode="yyyy-mm-dd"/><numFmt numFmtId="165" formatCode="hh:mm"/>' +
+        '<numFmt numFmtId="166" formatCode="yyyy-mm-dd hh:mm"/></numFmts>' +
         '<fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts>' +
         '<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>' +
         '<fill><patternFill patternType="solid"><fgColor rgb="FFE8F1FA"/><bgColor indexed="64"/></patternFill></fill></fills>' +
         '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
         '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
-        '<cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
-        '<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/></cellXfs>' +
+        '<cellXfs count="5"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+        '<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>' +
+        '<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>' +
+        '<xf numFmtId="165" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>' +
+        '<xf numFmtId="166" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs>' +
         '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>' +
         '</styleSheet>'
     },
@@ -209,4 +272,4 @@ function buildXlsx({ sheetName, columns, rows }) {
   )
 }
 
-module.exports = { buildXlsx, crc32, utf8, safeSheetName }
+module.exports = { buildXlsx, crc32, utf8, escapeXml, excelValue, safeSheetName }

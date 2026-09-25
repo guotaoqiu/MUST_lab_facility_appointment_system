@@ -121,15 +121,18 @@ module.exports = {
     return copy(load().users[openid] || null)
   },
 
-  async saveUser(openid, user) {
+  async updateUser(openid, mutate) {
     const state = load()
-    state.users[openid] = copy(user)
+    const outcome = mutate(copy(state.users[openid] || null)) || {}
+    if (outcome.error || !outcome.fields) return outcome
+    state.users[openid] = Object.assign({}, state.users[openid], copy(outcome.fields))
     save(state)
+    return outcome
   },
 
   async listRecords(query) {
     const records = load().records
-    return Object.keys(records)
+    const list = Object.keys(records)
       .map((id) => Object.assign({}, records[id], { id }))
       .filter((r) =>
         query.openid
@@ -137,6 +140,7 @@ module.exports = {
           : r.instrumentId === query.instrumentId && (!query.from || (r.date >= query.from && r.date <= query.to))
       )
       .sort((a, b) => (a.date !== b.date ? (a.date < b.date ? -1 : 1) : a.startMin - b.startMin))
+    return { records: list, truncated: false }
   },
 
   async getStatuses() {

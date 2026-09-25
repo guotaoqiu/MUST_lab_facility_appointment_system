@@ -201,6 +201,8 @@ describe('booking page', () => {
     const page = await openBooking()
     await pick(page, 'centrifuge')
     expect(text(page)).toContain('此儀器暫停預約：維修中')
+    expect(text(page).split('維修中')).toHaveLength(2) // shown once, not also in the bottom bar
+    expect(text(page.querySelector('.bar'))).toContain('恢復預約後即可選擇時段')
     expect(calendar(page).instance.data.disabled).toBe(true)
     await tapCell(page, 5, 600)
     expect(page.instance.data.selection).toBeNull()
@@ -208,6 +210,36 @@ describe('booking page', () => {
     await flush()
     const item = drawer(page).querySelectorAll('.item').find((i) => i.dom.dataset.id === 'centrifuge')
     expect(text(item)).toContain('暫停預約')
+  })
+
+  test('an administrator whose sign-in has ended is told so when cancelling', async () => {
+    await service.adminLogin(service.demoAdmin.account, service.demoAdmin.password)
+    const page = await openBooking()
+    await pick(page, 'thermal-imager')
+    page.querySelectorAll('.week')[1].dispatchEvent('tap')
+    await flush()
+    calendar(page).querySelectorAll('.block')[0].dispatchEvent('tap') // someone else's booking
+    await flush()
+    // Meanwhile the week-long admin sign-in runs out.
+    const demo = JSON.parse(w.storage.get('demoState.v2'))
+    demo.users['demo-user'].admin.expiresAt = 1
+    w.storage.set('demoState.v2', JSON.stringify(demo))
+    page.querySelector('#detail').querySelector('.btn-danger').dispatchEvent('tap')
+    await flush()
+    await flush()
+    expect(w.modals.map((m) => m.content)).toContain('需要管理員權限，請重新以管理員登入')
+    expect(w.modals.map((m) => m.content)).not.toContain('只能取消自己的預約')
+    expect(page.instance.data.isAdmin).toBe(false)
+    expect(page.querySelector('.manage')).toBeUndefined()
+  })
+
+  test('signed out on another device: back to the sign-in, saying why', async () => {
+    const page = await openBooking()
+    const demo = JSON.parse(w.storage.get('demoState.v2'))
+    demo.users['demo-user'].signedOut = true
+    w.storage.set('demoState.v2', JSON.stringify(demo))
+    await pick(page, 'centrifuge')
+    expect(w.reLaunch).toEqual(['/pages/index/index?login=1&expired=1'])
   })
 
   test('the grid stays disabled until the bookings have loaded', async () => {

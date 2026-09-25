@@ -312,10 +312,6 @@
   color: var(--text-3);
 }
 
-.bar-hint-suspended {
-  color: var(--danger);
-}
-
 .bar-info {
   flex: 1;
   min-width: 0;

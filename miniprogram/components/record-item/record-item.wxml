@@ -4,6 +4,7 @@
     <text class="tag tag-{{item.status}}">{{item.statusText}}</text>
   </view>
   <text class="when">{{item.when}}</text>
+  <text wx:if="{{item.warning}}" class="warning">{{item.warning}}</text>
   <view class="line">
     <text class="label">{{t.bookedBy}}</text>
     <text class="value">{{item.name}}</text>

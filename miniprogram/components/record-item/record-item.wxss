@@ -56,6 +56,17 @@
   color: var(--text);
 }
 
+.warning {
+  display: block;
+  margin: -4rpx 0 12rpx;
+  padding: 8rpx 16rpx;
+  border-radius: 8rpx;
+  font-size: 24rpx;
+  line-height: 34rpx;
+  color: var(--danger);
+  background: #fdf0f0;
+}
+
 .line {
   display: flex;
   margin-top: 8rpx;

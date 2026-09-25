@@ -34,7 +34,8 @@ function demoContext() {
     nowMs: Date.now(),
     admins: {
       configured: true,
-      verify: async (account, password) => account === DEMO_ADMIN.account && password === DEMO_ADMIN.password
+      verify: async (account, password) => (account === DEMO_ADMIN.account && password === DEMO_ADMIN.password ? 'demo' : null),
+      isActive: (session) => session.account === DEMO_ADMIN.account
     },
     async saveFile(bytes, name) {
       const path = wx.env.USER_DATA_PATH + '/' + name
@@ -59,7 +60,8 @@ async function call(action, data) {
     }
   }
   if (res.ok && res.serverTime) clock.sync(res.serverTime)
-  if (res.ok && res.me) session.sync(res.me)
+  // Also on failures such as ADMIN_REQUIRED: the sign-in has ended.
+  if (res.me) session.sync(res.me)
   return res
 }
 
@@ -83,9 +85,10 @@ module.exports = {
     return call('adminLogin', { account, password })
   },
 
+  /** Signs out on the server; the phone forgets the sign-in only if that worked. */
   async logout() {
     const res = await call('logout')
-    session.clear()
+    if (res.ok) session.clear()
     return res
   },
 
@@ -136,13 +139,25 @@ module.exports = {
     return call('setSuspended', { instrumentId, suspended, reason })
   },
 
+  /** Cancel all bookings of the instrument that have not ended yet. */
+  cancelUpcoming(instrumentId, reason) {
+    return call('cancelUpcoming', { instrumentId, reason })
+  },
+
   /** Build the Excel file and open it (the viewer can forward or save it). */
   async exportRecords(instrumentId, month, lang) {
     const res = await call('exportRecords', { instrumentId, month, lang })
     if (!res.ok) return res
     try {
       let path = res.file.path
-      if (res.file.fileID) path = (await wx.cloud.downloadFile({ fileID: res.file.fileID })).tempFilePath
+      if (res.file.fileID) {
+        try {
+          path = (await wx.cloud.downloadFile({ fileID: res.file.fileID })).tempFilePath
+        } finally {
+          // The copy in cloud storage is no longer needed.
+          call('discardExport', { fileID: res.file.fileID })
+        }
+      }
       const named = wx.env.USER_DATA_PATH + '/' + res.file.name
       if (path !== named) {
         try {

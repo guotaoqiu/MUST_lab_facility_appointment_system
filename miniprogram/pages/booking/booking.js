@@ -20,8 +20,8 @@ function viewInstrument(inst, lang, suspended) {
 }
 
 // Somebody who is not signed in (or no longer is): back to the sign-in choice.
-function toLogin() {
-  wx.reLaunch({ url: '/pages/index/index?login=1' })
+function toLogin(expired) {
+  wx.reLaunch({ url: '/pages/index/index?login=1' + (expired ? '&expired=1' : '') })
 }
 
 function formatSelection(selection, lang) {
@@ -175,7 +175,7 @@ Component({
         return
       }
       if (!session.get()) {
-        toLogin()
+        toLogin(true)
         return
       }
       this.bookings = res.bookings
@@ -328,9 +328,11 @@ Component({
           if (res.ok) {
             wx.showToast({ title: t.cancelled, icon: 'success' })
           } else if (res.code === 'NOT_LOGGED_IN') {
-            toLogin()
+            toLogin(true)
             return
           } else {
+            // e.g. ADMIN_REQUIRED: the admin sign-in has ended (the session
+            // now says so, and the reload below shows the calendar as a user).
             wx.showModal({
               title: t.noticeTitle,
               content: i18n.errorMessage(res.code, this.data.lang),
