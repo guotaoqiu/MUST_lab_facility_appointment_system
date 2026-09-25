@@ -162,6 +162,10 @@ function isInstrument(id) {
   return instruments.some((i) => i.id === id)
 }
 
+function instrumentIds() {
+  return instruments.map((i) => i.id)
+}
+
 function instrumentLabel(id, lang) {
   const inst = instruments.find((i) => i.id === id)
   return inst ? inst.name[lang] || inst.name.zh : id
@@ -330,8 +334,9 @@ async function loginAction(event, ctx) {
 async function logoutAction(event, ctx) {
   if (!ctx.user) return { ok: true, me: meOf(ctx) }
   const fields = { admin: null, signedOut: true, lastExport: null }
-  await saveUser(ctx, fields)
-  await discardFile(ctx, ctx.user.lastExport)
+  // The export to remove is read in the same step, in case one was just made.
+  const saved = await ctx.store.updateUser(ctx.openid, (user) => ({ previous: user && user.lastExport, fields }))
+  await discardFile(ctx, saved.previous)
   return { ok: true, me: meOf(withUser(ctx, fields, { isAdmin: false })) }
 }
 
@@ -572,7 +577,18 @@ async function adminRecordsAction(event, ctx) {
     suspendedMap(ctx)
   ])
   const views = listed.records.map((r) => recordView(r, ctx, now)).sort(byDateAndStart)
-  return { ok: true, month, records: views, summary: summarize(views), suspended: suspended[instrumentId] || null, me: meOf(ctx) }
+  const stopped = suspended[instrumentId] || null
+  return {
+    ok: true,
+    month,
+    records: views,
+    truncated: !!listed.truncated,
+    summary: summarize(views),
+    suspended: stopped,
+    // While suspended: bookings that have not ended, which the admin may cancel.
+    upcoming: stopped ? await countUpcoming(instrumentId, ctx) : 0,
+    me: meOf(ctx)
+  }
 }
 
 const EXPORT_TEXT = {
@@ -688,6 +704,10 @@ async function upcomingDays(instrumentId, ctx) {
     .filter((day) => day.bookings.length)
 }
 
+async function countUpcoming(instrumentId, ctx) {
+  return (await upcomingDays(instrumentId, ctx)).reduce((n, d) => n + d.bookings.length, 0)
+}
+
 async function setSuspendedAction(event, ctx) {
   const denied = requireAdmin(ctx)
   if (denied) return denied
@@ -703,7 +723,7 @@ async function setSuspendedAction(event, ctx) {
   }
   await ctx.store.setStatus(instrumentId, status)
   // Bookings already made are kept; the admin decides whether to cancel them.
-  const upcoming = event.suspended ? (await upcomingDays(instrumentId, ctx)).reduce((n, d) => n + d.bookings.length, 0) : 0
+  const upcoming = event.suspended ? await countUpcoming(instrumentId, ctx) : 0
   return { ok: true, suspended: event.suspended ? { reason: status.reason, since: status.updatedAt } : null, upcoming }
 }
 
@@ -772,5 +792,6 @@ module.exports = {
   normalizeDay,
   recordStatus,
   isInstrument,
+  instrumentIds,
   handleAction
 }

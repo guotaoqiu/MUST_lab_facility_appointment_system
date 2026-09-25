@@ -38,14 +38,14 @@
             placeholder="{{t.nicknamePlaceholder}}"
             placeholder-class="placeholder"
             bindinput="onNickname"
-            bindblur="onNickname"
+            bindblur="onNicknameBlur"
             bindchange="onNickname"
             bindnicknamereview="onNicknameReview"
           />
         </view>
         <text wx:if="{{error}}" class="error">{{error}}</text>
         <button class="btn btn-primary login-btn {{busy ? 'btn-disabled' : ''}}" hover-class="btn-pressed" form-type="submit">
-          {{busy ? t.loggingIn : edit ? t.save : t.finishLogin}}
+          {{busy ? (edit ? t.saving : t.loggingIn) : edit ? t.save : t.finishLogin}}
         </button>
       </view>
     </form>

@@ -137,6 +137,40 @@ describe('user sign-in (WeChat)', () => {
     expect(session.get().avatar).toMatch(/^wxfile:\/\/usr\/avatar-/) // kept on the phone in demo mode
   })
 
+  describe("waiting for WeChat's nickname review", () => {
+    // Tapping 完成 straight from the field: blur (the review starts), then submit.
+    async function typeAndSubmit(nickname) {
+      const base = wx.getAppBaseInfo
+      wx.getAppBaseInfo = () => ({ language: 'zh_HK', SDKVersion: '3.5.0' })
+      const page = await openLogin({ mode: 'user' })
+      await page.instance.onWechatLogin()
+      page.instance.onNicknameBlur({ detail: { value: nickname } })
+      const saving = page.instance.onSaveProfile({ detail: { value: { nickname } } })
+      wx.getAppBaseInfo = base
+      await flush()
+      return { page, saving }
+    }
+
+    test('a rejected nickname is not saved', async () => {
+      const { page, saving } = await typeAndSubmit('bad')
+      expect(w.redirectTo).toEqual([]) // still waiting
+      page.instance.onNicknameReview({ detail: { pass: false, timeout: false } })
+      await saving
+      expect(w.redirectTo).toEqual([])
+      expect(session.get()).toBeNull()
+      expect(page.instance.data.busy).toBe(false)
+      expect(text(page)).toContain('這個暱稱未通過微信檢查，請換一個')
+    })
+
+    test('an accepted nickname is saved', async () => {
+      const { page, saving } = await typeAndSubmit('小明')
+      page.instance.onNicknameReview({ detail: { pass: true, timeout: false } })
+      await saving
+      expect(w.redirectTo).toEqual(['/pages/booking/booking'])
+      expect(session.get()).toMatchObject({ nickname: '小明' })
+    })
+  })
+
   test('a nickname WeChat rejects is cleared and not submitted', async () => {
     const page = await openLogin({ mode: 'user' })
     await page.instance.onWechatLogin()
@@ -156,10 +190,39 @@ describe('user sign-in (WeChat)', () => {
     expect(page.instance.data.step).toBe('profile')
     expect(page.instance.data.nickname).toBe('小明')
     expect(text(page)).toContain('儲存')
-    await page.instance.onSaveProfile({ detail: { value: { nickname: '小明明' } } })
+    let release
+    const login = service.login
+    service.login = (p) => new Promise((resolve) => (release = () => resolve(login(p))))
+    const saving = page.instance.onSaveProfile({ detail: { value: { nickname: '小明明' } } })
+    try {
+      await flush()
+      expect(text(page.querySelector('.login-btn')).trim()).toBe('儲存中…') // not 登入中…
+    } finally {
+      release()
+      await saving
+      service.login = login
+    }
     expect(w.navigateBack).toBe(1)
     expect(w.toasts.map((t) => t.title)).toContain('已儲存')
     expect(session.get()).toMatchObject({ nickname: '小明明', avatar: 'wxfile://usr/old.jpg' }) // the photo is kept
+  })
+
+  test('a new photo that fails to upload is reported, not "saved"', async () => {
+    await service.login({ nickname: '小明', avatar: 'wxfile://usr/old.jpg' })
+    const page = await openLogin({ mode: 'user', edit: '1', next: 'back' })
+    const upload = service.uploadAvatar
+    service.uploadAvatar = async () => ''
+    page.instance.onChooseAvatar({ detail: { avatarUrl: 'http://tmp/new.jpg' } })
+    await page.instance.onSaveProfile({ detail: { value: { nickname: '小明' } } })
+    service.uploadAvatar = upload
+    await flush()
+    expect(w.navigateBack).toBe(0)
+    expect(w.toasts).toEqual([])
+    expect(text(page)).toContain('頭像上傳失敗')
+    expect(page.instance.data.avatar).toBe('wxfile://usr/old.jpg') // the saved photo is shown again
+    // Saving again keeps the old photo.
+    await page.instance.onSaveProfile({ detail: { value: { nickname: '小明' } } })
+    expect(w.navigateBack).toBe(1)
   })
 
   test('returning users go straight in', async () => {

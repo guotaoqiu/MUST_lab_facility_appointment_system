@@ -34,6 +34,9 @@ Component({
     suspended: null,
     suspendedText: '',
     switchOn: false, // follows the switch as shown, so it can be flipped back
+    statusKnown: false, // the instrument's status has loaded
+    upcoming: 0, // while suspended: bookings that have not ended
+    cancelAllText: '',
     loading: false,
     loadError: false,
     busy: false,
@@ -44,13 +47,21 @@ Component({
     onLoad(query) {
       query = query || {}
       let id = query.id
-      if (!id) {
+      if (!core.isInstrument(id)) {
+        // The instrument last used here, or else the one open on the calendar.
         try {
-          id = wx.getStorageSync(LAST_KEY)
+          id = wx.getStorageSync(LAST_KEY) || wx.getStorageSync('lastInstrument')
         } catch (e) {}
       }
       const index = Math.max(0, instruments.findIndex((i) => i.id === id))
+      this.remember(instruments[index].id)
       this.setData({ index, month: core.isMonthString(query.month) ? query.month : currentMonth() })
+    },
+
+    remember(id) {
+      try {
+        wx.setStorageSync(LAST_KEY, id)
+      } catch (e) {}
     },
 
     onShow() {
@@ -99,9 +110,12 @@ Component({
       const s = res.summary
       this.setData({
         records: res.records.map((r) => records.viewRecord(r, lang, { title: 'date', admin: true })),
-        summaryText: s.total ? i18n.format(t.summary, s) : '',
+        summaryText: (s.total ? i18n.format(t.summary, s) : '') + (res.truncated ? (s.total ? ' · ' : '') + t.truncatedNote : ''),
         suspended: res.suspended,
         switchOn: !!res.suspended,
+        statusKnown: true,
+        upcoming: res.upcoming || 0,
+        cancelAllText: res.upcoming ? i18n.format(t.cancelAllUpcoming, { n: res.upcoming }) : '',
         suspendedText: res.suspended
           ? (res.suspended.reason ? res.suspended.reason + ' · ' : '') + i18n.format(t.suspendedSince, { time: i18n.formatTimestamp(res.suspended.since, lang) })
           : ''
@@ -147,11 +161,9 @@ Component({
 
     onPickInstrument(e) {
       const index = Number(e.detail.value)
-      try {
-        wx.setStorageSync(LAST_KEY, instruments[index].id)
-      } catch (err) {}
+      this.remember(instruments[index].id)
       this.result = null
-      this.setData({ index, records: [], summaryText: '', suspended: null, switchOn: false })
+      this.setData({ index, records: [], summaryText: '', suspended: null, switchOn: false, statusKnown: false, upcoming: 0, cancelAllText: '' })
       this.applyLang()
       this.load()
     },
@@ -225,11 +237,17 @@ Component({
           wx.showLoading({ title: '', mask: true })
           const res = await service.cancelUpcoming(this.data.current.id, reason)
           wx.hideLoading()
-          if (!res.ok) return this.fail(res)
-          wx.showToast({ title: i18n.format(t.cancelledCount, { n: res.cancelled }), icon: 'none' })
-          this.load()
+          if (res.ok) wx.showToast({ title: i18n.format(t.cancelledCount, { n: res.cancelled }), icon: 'none' })
+          else this.fail(res)
+          if (res.code !== 'ADMIN_REQUIRED') this.load() // some may have been cancelled before a failure
         }
       })
+    },
+
+    // Also available later, as long as the instrument stays suspended.
+    onCancelAllTap() {
+      if (this.data.busy || !this.data.suspended || !this.data.upcoming) return
+      this.offerCancelUpcoming(this.data.upcoming, this.data.suspended.reason || '')
     },
 
     onCancel(e) {

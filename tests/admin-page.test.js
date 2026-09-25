@@ -133,12 +133,42 @@ test('when the instrument broke, its upcoming bookings can be cancelled in one g
   expect(cancelled).toHaveLength(2)
 })
 
+test('bookings kept at first can still be cancelled in one go later', async () => {
+  const page = await openAdmin()
+  w.modalContent = '轉子損壞'
+  w.modalAnswer = true
+  const answers = [true, false] // confirm the suspension, then keep the bookings
+  w.showModalAnswers = answers
+  const showModal = wx.showModal
+  wx.showModal = (o) => {
+    w.modals.push(o)
+    if (o.success) o.success({ confirm: answers.length ? answers.shift() : true, content: w.modalContent })
+  }
+  page.instance.onSuspendChange({ detail: { value: true } })
+  await flush()
+  await flush()
+  await flush()
+  expect(page.querySelectorAll('.record').filter((r) => text(r).includes('儀器暫停預約'))).toHaveLength(0)
+  const button = page.querySelector('.cancel-all')
+  expect(text(button)).toContain('取消全部 2 個未結束的預約')
+  button.dispatchEvent('tap')
+  await flush()
+  await flush()
+  await flush()
+  wx.showModal = showModal
+  expect(page.querySelectorAll('.record').filter((r) => text(r).includes('儀器暫停預約：轉子損壞'))).toHaveLength(2)
+  expect(page.querySelector('.cancel-all')).toBeUndefined()
+})
+
 test('a list that failed to load offers a retry', async () => {
   const original = service.adminRecords
   service.adminRecords = async () => ({ ok: false, code: 'NETWORK_ERROR' })
   const page = await openAdmin()
   expect(text(page)).toContain('載入失敗')
   expect(text(page)).not.toContain('這個月沒有預約記錄')
+  // The status is unknown too: not "open", and the switch waits.
+  expect(text(page)).not.toContain('開放預約中')
+  expect(page.instance.data.statusKnown).toBe(false)
   service.adminRecords = original
   page.querySelector('.retry').dispatchEvent('tap')
   await flush()
@@ -152,6 +182,14 @@ test('opens on the instrument used last time', async () => {
   await flush()
   const again = await openAdmin({})
   expect(again.instance.data.current.id).toBe('carbonation-reactor')
+  // Opened for an instrument from the calendar's 管理 button: that one next time.
+  await openAdmin({ id: 'ball-mill' })
+  expect((await openAdmin({})).instance.data.current.id).toBe('ball-mill')
+})
+
+test('without a remembered instrument it opens the one on the calendar', async () => {
+  w.storage.set('lastInstrument', JSON.stringify('centrifuge'))
+  expect((await openAdmin({})).instance.data.current.id).toBe('centrifuge')
 })
 
 test('without administrator rights it goes to the administrator sign-in, and comes back here', async () => {

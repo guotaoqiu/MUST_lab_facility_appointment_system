@@ -96,6 +96,20 @@
   color: var(--text-3);
 }
 
+.cancel-all {
+  margin-top: 20rpx;
+  padding: 16rpx 24rpx;
+  border: 1rpx solid #efc4c4;
+  border-radius: 12rpx;
+  text-align: center;
+  font-size: 26rpx;
+  color: var(--danger);
+}
+
+.cancel-all-pressed {
+  background: #fdf0f0;
+}
+
 .records {
   padding: 28rpx 0 0;
   overflow: hidden;

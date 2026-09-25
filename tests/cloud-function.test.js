@@ -7,8 +7,9 @@
 //   error with errCode -501001 and no `code`, which runTransaction does NOT
 //   retry by itself. (A conflict reported at commit keeps its `code` and is
 //   retried by runTransaction, as in @cloudbase/database.)
-// - documents that tie on every orderBy field come back in a different order
-//   in each query, as MongoDB allows.
+// - without orderBy, documents come back in the order they were added (like
+//   MongoDB's natural order); documents that tie on every orderBy field come
+//   back in a different order in each query, as MongoDB allows.
 const crypto = require('crypto')
 
 const COMMIT_CONFLICT = { code: 'DATABASE_TRANSACTION_CONFLICT', message: 'transaction conflict' }
@@ -41,7 +42,8 @@ function createFakeCloud() {
   const command = {
     gte: (x) => cmd((v) => v >= x),
     lte: (x) => cmd((v) => v <= x),
-    in: (list) => cmd((v) => list.indexOf(v) !== -1)
+    in: (list) => cmd((v) => list.indexOf(v) !== -1),
+    exists: (flag) => cmd((v) => (v !== undefined) === flag)
   }
   const matches = (doc, query) =>
     Object.keys(query).every((key) => (query[key] && query[key].test ? query[key].test(doc[key]) : doc[key] === query[key]))
@@ -71,7 +73,7 @@ function createFakeCloud() {
         })
         // Shuffle first (deterministically per query): ties keep a random order.
         let seed = ++state.queries * 7919
-        for (let i = out.length - 1; i > 0; i--) {
+        for (let i = order.length ? out.length - 1 : 0; i > 0; i--) {
           seed = (seed * 16807) % 2147483647
           const j = seed % (i + 1)
           ;[out[i], out[j]] = [out[j], out[i]]
@@ -425,6 +427,22 @@ describe('documents written by a mini program client are ignored', () => {
     console.warn.mockRestore()
   })
 
+  test('forged documents do not use up query limits either', async () => {
+    jest.spyOn(console, 'warn').mockImplementation(() => {})
+    for (let i = 0; i < 150; i++) forge('instrument_status', 'junk-' + i, { suspended: false })
+    for (let i = 0; i < 20001; i++) forge('bookings', 'f' + i, { instrumentId: 'centrifuge', date: '2026-09-01', status: 'active' })
+    const real = (await create()).booking
+    await as('admin-1', { action: 'adminLogin', account: 'labadmin', password: 'correct horse' })
+    await as('admin-1', { action: 'setSuspended', instrumentId: 'centrifuge', suspended: true, reason: '維修中' })
+    expect((await fn.main({ action: 'list', instrumentId: 'centrifuge' })).suspended).toMatchObject({ centrifuge: { reason: '維修中' } })
+    expect(await create({ startMin: 720, endMin: 780 })).toEqual({ ok: false, code: 'SUSPENDED' })
+    const records = await as('admin-1', { action: 'adminRecords', instrumentId: 'centrifuge', month: '2026-09' })
+    expect(records).toMatchObject({ truncated: false, upcoming: 1, suspended: { reason: '維修中' } })
+    expect(records.records.map((r) => r.id)).toEqual([real.id])
+    expect(await as('admin-1', { action: 'exportRecords', instrumentId: 'centrifuge' })).toMatchObject({ ok: true, count: 1 })
+    console.warn.mockRestore()
+  })
+
   test('forged statuses, records and day documents are ignored', async () => {
     jest.spyOn(console, 'warn').mockImplementation(() => {})
     forge('instrument_status', 'centrifuge', { suspended: true, reason: 'fake' })
@@ -503,6 +521,29 @@ test('admin records, suspension and export', async () => {
   // Once downloaded the mini program has it removed.
   expect(await as('admin-1', { action: 'discardExport', fileID: second.file.fileID })).toEqual({ ok: true })
   expect(state.deleted).toEqual([first.file.fileID, second.file.fileID])
+  expect(docsOf('users').get('admin-1').data.lastExport).toBeNull()
+})
+
+test('an export made by the first version (shorter file name) is still cleaned up', async () => {
+  await create()
+  await as('admin-1', { action: 'adminLogin', account: 'labadmin', password: 'correct horse' })
+  const legacy = 'cloud://env.1234-env/exports/mugcrzeo8f7grxjt.xlsx'
+  docsOf('users').get('admin-1').data.lastExport = legacy
+  expect((await as('admin-1', { action: 'exportRecords', instrumentId: 'centrifuge' })).ok).toBe(true)
+  expect(state.deleted).toEqual([legacy])
+})
+
+test('an export made while signing out is not left behind', async () => {
+  await create()
+  await as('admin-1', { action: 'adminLogin', account: 'labadmin', password: 'correct horse' })
+  const first = await as('admin-1', { action: 'exportRecords', instrumentId: 'centrifuge' })
+  let second
+  // Another device finishes an export in the middle of the sign-out.
+  state.beforeWrite = async () => {
+    second = await as('admin-1', { action: 'exportRecords', instrumentId: 'centrifuge' })
+  }
+  expect((await as('admin-1', { action: 'logout' })).ok).toBe(true)
+  expect(state.deleted.sort()).toEqual([first.file.fileID, second.file.fileID].sort())
   expect(docsOf('users').get('admin-1').data.lastExport).toBeNull()
 })
 

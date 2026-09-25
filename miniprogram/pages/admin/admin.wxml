@@ -14,12 +14,14 @@
     <view class="status-row">
       <view class="status-text">
         <text class="card-title">{{t.suspendSwitch}}</text>
-        <text wx:if="{{suspended}}" class="status status-off">{{suspendedText}}</text>
+        <text wx:if="{{!statusKnown}}" class="status">{{loadError ? t.loadFailed : t.loading}}</text>
+        <text wx:elif="{{suspended}}" class="status status-off">{{suspendedText}}</text>
         <text wx:else class="status status-on">{{t.accepting}}</text>
       </view>
-      <switch checked="{{switchOn}}" color="#d14343" disabled="{{busy}}" bindchange="onSuspendChange"></switch>
+      <switch checked="{{switchOn}}" color="#d14343" disabled="{{busy || !statusKnown}}" bindchange="onSuspendChange"></switch>
     </view>
     <text class="note">{{t.suspendNote}}</text>
+    <view wx:if="{{suspended && upcoming}}" class="cancel-all" hover-class="cancel-all-pressed" bindtap="onCancelAllTap" aria-role="button">{{cancelAllText}}</view>
   </view>
 
   <view class="card records">

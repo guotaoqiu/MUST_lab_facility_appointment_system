@@ -9,8 +9,9 @@
 //   instrument_status  _id = instrument id, { suspended, reason, updatedAt, updatedBy }
 //
 // Documents a mini program writes itself always carry `_openid`; documents
-// this function writes never do. Anything with `_openid` is ignored, so even
-// a collection left open to clients cannot grant admin rights or fake data.
+// this function writes never do. Queries leave out anything with `_openid`
+// (so it does not use up their limits either), and trusted() checks again:
+// even a collection left open to clients cannot grant admin rights or fake data.
 const crypto = require('crypto')
 const cloud = require('wx-server-sdk')
 const core = require('./shared/booking-core')
@@ -27,8 +28,9 @@ const STATUS = 'instrument_status'
 const MAX_ATTEMPTS = 4
 const PAGE = 1000 // most documents one query may return
 const MAX_PAGES = 20
-// Only files this function created may be deleted.
-const EXPORT_FILE = /^cloud:\/\/[^/]+\/exports\/[0-9a-f]{32}\.xlsx$/
+// Only files this function created may be deleted (32 hex characters; the
+// first version used shorter base-36 names).
+const EXPORT_FILE = /^cloud:\/\/[^/]+\/exports\/(?:[0-9a-f]{32}|[0-9a-z]{9,20})\.xlsx$/
 
 class Abort extends Error {
   constructor(outcome) {
@@ -134,12 +136,16 @@ async function ensureDoc(collection, id, data) {
   }
 }
 
+// Added to every query: only documents this function wrote.
+const SERVER_WRITTEN = { _openid: _.exists(false) }
+
 const store = {
   async listDays(instrumentId, fromDate, toDate) {
     const ids = []
     for (let date = fromDate; date <= toDate; date = core.addDays(date, 1)) ids.push(dayId(instrumentId, date))
     // Look days up by _id (always indexed).
-    const res = await read(() => db.collection(SCHEDULES).where({ _id: _.in(ids) }).limit(100).get(), { data: [] })
+    const where = Object.assign({ _id: _.in(ids) }, SERVER_WRITTEN)
+    const res = await read(() => db.collection(SCHEDULES).where(where).limit(100).get(), { data: [] })
     return res.data.filter(trusted)
   },
 
@@ -192,12 +198,12 @@ const store = {
   },
 
   async listRecords(query) {
-    const where = query.openid
-      ? { openid: query.openid }
-      : Object.assign(
-          { instrumentId: query.instrumentId },
-          query.from ? { date: _.gte(query.from).and(_.lte(query.to)) } : {}
-        )
+    const where = Object.assign(
+      query.openid
+        ? { openid: query.openid }
+        : Object.assign({ instrumentId: query.instrumentId }, query.from ? { date: _.gte(query.from).and(_.lte(query.to)) } : {}),
+      SERVER_WRITTEN
+    )
     const records = []
     for (let page = 0; page < MAX_PAGES; page++) {
       // Sorted down to _id, so pages neither overlap nor skip records.
@@ -221,7 +227,8 @@ const store = {
   },
 
   async getStatuses() {
-    const res = await read(() => db.collection(STATUS).limit(100).get(), { data: [] })
+    const where = Object.assign({ _id: _.in(core.instrumentIds()) }, SERVER_WRITTEN)
+    const res = await read(() => db.collection(STATUS).where(where).limit(100).get(), { data: [] })
     const out = {}
     res.data.filter(trusted).forEach((doc) => {
       out[doc._id] = withoutId(doc)

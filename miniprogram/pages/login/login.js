@@ -3,6 +3,27 @@ const i18n = require('../../utils/i18n')
 const session = require('../../utils/session')
 const service = require('../../services/booking')
 
+const REVIEW_WAIT_MS = 2500
+
+function newerOrEqual(version, min) {
+  const a = String(version || '0').split('.').map(Number)
+  const b = min.split('.').map(Number)
+  for (let i = 0; i < b.length; i++) {
+    if ((a[i] || 0) !== b[i]) return (a[i] || 0) > b[i]
+  }
+  return true
+}
+
+// WeChat reviews a type="nickname" input after it loses focus and reports
+// back through bindnicknamereview (base library 2.29.1 and later).
+function reviewsNickname() {
+  try {
+    return newerOrEqual((wx.getAppBaseInfo ? wx.getAppBaseInfo() : wx.getSystemInfoSync()).SDKVersion, '2.29.1')
+  } catch (e) {
+    return false
+  }
+}
+
 // Where to go back to after signing in again on the admin page.
 function adminQuery(query) {
   const parts = []
@@ -44,6 +65,7 @@ Component({
       if (mode === 'user' && query.edit === '1' && current) {
         this.setData({ step: 'profile', edit: true, nickname: current.nickname || '', avatar: current.avatar || '' })
       }
+      this.savedAvatar = this.data.avatar
       this.applyLang()
       if (mode === 'user' && wx.onNeedPrivacyAuthorization) {
         wx.onNeedPrivacyAuthorization((resolve) => {
@@ -69,6 +91,7 @@ Component({
     },
 
     finish() {
+      this.finished = true
       if (this.data.edit) {
         wx.showToast({ title: this.data.t.saved, icon: 'success' })
         wx.navigateBack()
@@ -107,15 +130,38 @@ Component({
 
     onNickname(e) {
       if (e.detail && typeof e.detail.value === 'string') this.setData({ nickname: e.detail.value, error: '' })
+      if (this.review && !this.review.pending) this.review = null // a new nickname needs a new review
     },
 
-    // WeChat checks the nickname after the field loses focus and empties it
-    // when the check fails.
+    // Leaving the field starts WeChat's review of the nickname; saving waits
+    // for its answer (tapping 完成 straight from the field does both at once).
+    onNicknameBlur(e) {
+      this.onNickname(e)
+      if (reviewsNickname()) this.review = { pending: true, pass: true }
+    },
+
+    // WeChat empties the field when the nickname fails its check.
     onNicknameReview(e) {
-      if (e.detail && e.detail.pass === false) {
+      if (this.finished) return
+      const pass = !(e.detail && e.detail.pass === false)
+      this.review = { pending: false, pass }
+      if (this.reviewDone) this.reviewDone()
+      if (!pass) {
         this.setData({ nickname: '' })
         this.showError({ code: 'NICKNAME_REJECTED' })
       }
+    },
+
+    waitForReview() {
+      if (!this.review || !this.review.pending) return Promise.resolve()
+      return new Promise((resolve) => {
+        const timer = setTimeout(() => this.reviewDone(), REVIEW_WAIT_MS) // no answer: go ahead
+        this.reviewDone = () => {
+          clearTimeout(timer)
+          this.reviewDone = null
+          resolve()
+        }
+      })
     },
 
     // Step 2 (first time, or ?edit=1): save the nickname and photo. Submitted
@@ -129,9 +175,25 @@ Component({
         this.showError({ code: 'NICKNAME_REQUIRED' })
         return
       }
-      this.setData({ busy: true, error: '', nickname })
-      // Without a new photo the saved one is kept (also if the upload fails).
-      const avatar = this.avatarPicked ? (await service.uploadAvatar(this.data.avatar)) || undefined : undefined
+      this.setData({ busy: true, error: '' })
+      await this.waitForReview()
+      if (this.review && !this.review.pass) {
+        this.setData({ busy: false }) // onNicknameReview has said why
+        return
+      }
+      this.setData({ nickname })
+      // Without a new photo the saved one is kept.
+      let avatar
+      if (this.avatarPicked) {
+        avatar = await service.uploadAvatar(this.data.avatar)
+        if (!avatar) {
+          // Put the saved photo back, so saving again keeps it.
+          this.avatarPicked = false
+          this.setData({ busy: false, avatar: this.savedAvatar })
+          this.showError({ code: 'AVATAR_UPLOAD_FAILED' })
+          return
+        }
+      }
       const res = await service.login({ nickname, avatar })
       this.setData({ busy: false })
       if (!res.ok) {

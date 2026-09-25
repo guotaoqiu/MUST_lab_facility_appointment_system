@@ -666,6 +666,9 @@ describe('an instrument goes out of service', () => {
     const { store } = await withBookings()
     const res = await act(store, 'admin', { action: 'setSuspended', instrumentId: 'ball-mill', suspended: true, reason: '轉子損壞' })
     expect(res).toMatchObject({ ok: true, upcoming: 2 })
+    // The admin list keeps offering to cancel them while the instrument is suspended.
+    expect(await act(store, 'admin', { action: 'adminRecords', instrumentId: 'ball-mill', month: '2026-09' })).toMatchObject({ upcoming: 2, truncated: false })
+    expect(await act(store, 'admin', { action: 'adminRecords', instrumentId: 'centrifuge', month: '2026-09' })).toMatchObject({ upcoming: 0 })
     const mine = await act(store, 'u2', { action: 'myBookings' })
     expect(mine.upcoming.map((r) => [r.instrumentId, r.suspended])).toEqual([
       ['centrifuge', undefined],
