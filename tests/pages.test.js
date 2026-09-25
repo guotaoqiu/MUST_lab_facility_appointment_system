@@ -151,7 +151,7 @@ describe('booking page', () => {
     service.list = () => new Promise((resolve) => (release = resolve))
     await pick(page, 'centrifuge')
     expect(page.instance.data.ready).toBe(false)
-    expect(text(page)).toContain('載入中…')
+    expect(text(page.querySelector('.sticky'))).toContain('載入中…') // floats over the grid
     expect(calendar(page).instance.data.disabled).toBe(true)
     await tapCell(page, 5, 600)
     expect(page.instance.data.selection).toBeNull()
@@ -284,6 +284,32 @@ describe('confirm page', () => {
     page.instance.onUnload() // the user pressed back during the toast
     back[0]()
     expect(w.navigateBack).toBe(0)
+  })
+
+  test('a booking that finishes after the user went back refreshes the calendar', async () => {
+    const booking = await openBooking()
+    await pick(booking, 'thermal-imager')
+    const page = await openConfirm(query)
+    page.instance.onNameInput({ detail: { value: '陳大文' } })
+    page.instance.onPurposeInput({ detail: { value: '測試' } })
+    const original = service.create
+    let release
+    service.create = (payload) => new Promise((resolve) => (release = () => original(payload).then(resolve)))
+    const submitted = page.instance.submit()
+    page.instance.onUnload() // back pressed while saving
+    booking.instance.onShow()
+    await flush()
+    global.getCurrentPages = () => [booking.instance]
+    booking.instance.route = 'pages/booking/booking'
+    release()
+    await submitted
+    await flush()
+    await flush()
+    service.create = original
+    delete global.getCurrentPages
+    expect(w.navigateBack).toBe(0)
+    expect(w.toasts[0]).toMatchObject({ title: '預約成功', mask: false })
+    expect(calendar(booking).querySelector('.block-mine')).toBeTruthy()
   })
 
   test('a slot taken in the meantime sends the user back to choose again', async () => {

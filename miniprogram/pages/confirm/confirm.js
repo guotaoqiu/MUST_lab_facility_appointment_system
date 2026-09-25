@@ -8,6 +8,12 @@ const NAME_KEY = 'bookerName'
 // After these errors the chosen slot is no longer usable: go back and pick again.
 const RESELECT_CODES = ['CONFLICT', 'IN_PAST', 'OUT_OF_RANGE', 'INVALID_TIME', 'INVALID_DATE', 'BAD_INSTRUMENT']
 
+function refreshBookingPage() {
+  const pages = typeof getCurrentPages === 'function' ? getCurrentPages() : []
+  const top = pages[pages.length - 1]
+  if (top && top.route === 'pages/booking/booking' && typeof top.load === 'function') top.load()
+}
+
 function fieldError(value, max, prefix, lang) {
   const text = core.cleanText(value)
   if (!text) return i18n.errorMessage(prefix + '_REQUIRED', lang)
@@ -119,7 +125,8 @@ Component({
         try {
           wx.setStorageSync(NAME_KEY, checked.value.name)
         } catch (e) {}
-        wx.showToast({ title: this.data.t.success, icon: 'success', duration: 1500, mask: true })
+        if (this.left) refreshBookingPage() // it loaded before this booking existed
+        wx.showToast({ title: this.data.t.success, icon: 'success', duration: 1500, mask: !this.left })
         // Stay "submitting" so the button cannot be pressed again before leaving.
         this.backTimer = setTimeout(() => {
           if (!this.left) wx.navigateBack()

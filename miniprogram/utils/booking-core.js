@@ -243,7 +243,14 @@ async function createAction(event, ctx) {
   const outcome = await ctx.store.updateDay(instrumentId, v.date, (day) => {
     // A retry of a request that already went through (e.g. its response was lost).
     const earlier = requestId && day.bookings.find((b) => b.openid === ctx.openid && b.requestId === requestId)
-    if (earlier) return { booking: earlier }
+    if (earlier) {
+      if (earlier.startMin !== v.startMin || earlier.endMin !== v.endMin) return { error: 'BAD_REQUEST' }
+      if (earlier.name === v.name && earlier.purpose === v.purpose) return { booking: earlier }
+      // The user corrected the text before retrying: keep the latest.
+      earlier.name = v.name
+      earlier.purpose = v.purpose
+      return { day, booking: earlier }
+    }
     if (findConflict(day.bookings, v.startMin, v.endMin)) return { error: 'CONFLICT' }
     day.bookings.push(booking)
     day.bookings.sort((a, b) => a.startMin - b.startMin)

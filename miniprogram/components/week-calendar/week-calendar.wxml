@@ -51,7 +51,7 @@
           catchtouchstart="onHandleStart"
           catchtouchmove="onHandleMove"
           catchtouchend="onHandleEnd"
-          catchtouchcancel="onHandleEnd"
+          catchtouchcancel="onHandleCancel"
           catchtap="noop"
         >
           <view class="dot"></view>
@@ -62,7 +62,7 @@
           catchtouchstart="onHandleStart"
           catchtouchmove="onHandleMove"
           catchtouchend="onHandleEnd"
-          catchtouchcancel="onHandleEnd"
+          catchtouchcancel="onHandleCancel"
           catchtap="noop"
         >
           <view class="dot"></view>

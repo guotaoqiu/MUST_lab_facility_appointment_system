@@ -48,13 +48,14 @@
           <text class="day-num">{{item.dayNum}}</text>
         </view>
       </view>
+      <!-- Floats over the top of the grid so the grid does not move when it goes away. -->
+      <view wx:if="{{loadError}}" class="status status-error">
+        <text>{{t.loadFailed}}</text>
+        <text class="status-retry" bindtap="retry" aria-role="button">{{t.retry}}</text>
+      </view>
+      <view wx:elif="{{!ready}}" class="status">{{t.loading}}</view>
     </view>
 
-    <view wx:if="{{loadError}}" class="status status-error">
-      <text>{{t.loadFailed}}</text>
-      <text class="status-retry" bindtap="retry" aria-role="button">{{t.retry}}</text>
-    </view>
-    <view wx:elif="{{!ready}}" class="status">{{t.loading}}</view>
 
     <week-calendar
       id="calendar"

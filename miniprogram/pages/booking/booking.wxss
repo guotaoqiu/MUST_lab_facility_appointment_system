@@ -192,9 +192,14 @@
 }
 
 .status {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
   display: flex;
   justify-content: center;
   padding: 16rpx;
+  pointer-events: none;
   font-size: 24rpx;
   color: var(--text-2);
   background: var(--bg);
@@ -206,6 +211,7 @@
 }
 
 .status-retry {
+  pointer-events: auto;
   margin-left: 16rpx;
   font-weight: 600;
   text-decoration: underline;

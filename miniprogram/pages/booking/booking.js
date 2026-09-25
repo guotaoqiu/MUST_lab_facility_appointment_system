@@ -220,7 +220,9 @@ Component({
 
     onSelectionChange(e) {
       const selection = e.detail.selection
+      const barChanges = !selection !== !this.data.selection
       this.setData({ selection, selectionText: formatSelection(selection, this.data.lang) })
+      if (barChanges) this.measureInsets() // the bottom bar is taller with a selection
     },
 
     clearSelection() {

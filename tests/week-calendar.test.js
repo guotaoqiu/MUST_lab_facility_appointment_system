@@ -202,10 +202,14 @@ describe('tapping a dot without dragging', () => {
   })
   afterEach(() => rect.mockRestore())
 
-  async function tapHandle(cal, edge, y) {
+  async function tapHandle(cal, edge, y, moves = []) {
     const handle = cal.querySelector('.handle-' + edge)
     handle.dispatchEvent('touchstart', { touches: [{ x: 5, y }] })
     await flush()
+    for (const m of moves) {
+      handle.dispatchEvent('touchmove', { touches: [m] })
+      await flush()
+    }
     handle.dispatchEvent('touchend', {})
     await flush()
   }
@@ -222,6 +226,53 @@ describe('tapping a dot without dragging', () => {
     await tap(cal, SAT, 900)
     await tapHandle(cal, 'bottom', 300 + CELL_PX + 5)
     expect(lastSelection()).toEqual({ date: '2026-09-26', startMin: 930, endMin: 960 })
+    expect(events.selectiontap).toHaveLength(0)
+  })
+
+  test('over a neighbouring booking it opens that booking', async () => {
+    const cal = setup()
+    await tap(cal, SAT, 720) // right below b1 (10:00–12:00)
+    await tapHandle(cal, 'top', 295)
+    expect(events.bookingtap.map((e) => e.booking.id)).toEqual(['b1'])
+    expect(lastSelection()).toEqual({ date: '2026-09-26', startMin: 720, endMin: 750 })
+  })
+
+  test('a quick tap that ends before the position is known still counts', async () => {
+    const cal = setup()
+    await tap(cal, SAT, 900)
+    const handle = cal.querySelector('.handle-bottom')
+    handle.dispatchEvent('touchstart', { touches: [{ x: 5, y: 310 }] })
+    handle.dispatchEvent('touchend', {})
+    await flush()
+    await flush()
+    expect(events.selectiontap).toHaveLength(1)
+  })
+
+  test('a little jitter near the bottom bar is still a tap, not an auto-scroll', async () => {
+    const cal = setup({ viewBottom: 60 })
+    wx.pageScrollTo = jest.fn()
+    await tap(cal, SAT, 900)
+    rect.mockImplementation(function () {
+      return /--sel(\s|$)/.test(this.className)
+        ? { top: 590, bottom: 590 + CELL_PX, left: 0, right: 40, width: 40, height: CELL_PX }
+        : { top: 0, bottom: 0, left: 0, right: 0, width: 0, height: 0 }
+    })
+    await tapHandle(cal, 'bottom', 600, [{ x: 5, y: 601 }])
+    await new Promise((resolve) => setTimeout(resolve, 150))
+    expect(events.selectiontap).toHaveLength(1)
+    expect(wx.pageScrollTo).not.toHaveBeenCalled()
+    expect(lastSelection()).toEqual({ date: '2026-09-26', startMin: 900, endMin: 930 })
+  })
+
+  test('a sideways swipe or a cancelled touch is not a tap', async () => {
+    const cal = setup()
+    await tap(cal, SAT, 900)
+    await tapHandle(cal, 'bottom', 310, [{ x: 60, y: 311 }, { x: 120, y: 312 }])
+    const handle = cal.querySelector('.handle-bottom')
+    handle.dispatchEvent('touchstart', { touches: [{ x: 5, y: 310 }] })
+    await flush()
+    handle.dispatchEvent('touchcancel', {})
+    await flush()
     expect(events.selectiontap).toHaveLength(0)
   })
 })

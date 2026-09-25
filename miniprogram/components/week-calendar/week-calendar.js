@@ -219,12 +219,14 @@ Component({
         if (b.endMin <= s.startMin) minStart = Math.max(minStart, b.endMin)
         if (b.startMin >= s.endMin) maxEnd = Math.min(maxEnd, b.startMin)
       })
-      const y = e.touches[0].clientY
+      const touch = e.touches[0]
       const drag = {
         edge: e.currentTarget.dataset.edge,
-        y0: y,
-        y,
+        x0: touch.clientX,
+        y0: touch.clientY,
+        y: touch.clientY,
         moved: false,
+        ended: false,
         scrolled: 0, // px the page was auto-scrolled during this drag
         scrollTop0: null,
         dir: 0,
@@ -239,6 +241,7 @@ Component({
         .select('.sel')
         .boundingClientRect((rect) => {
           drag.rect = rect
+          if (drag.ended) this.tapThrough(drag) // the finger was lifted before this answer came back
         })
         .selectViewport()
         .scrollOffset((res) => {
@@ -250,25 +253,43 @@ Component({
     onHandleMove(e) {
       const d = this.drag
       if (!d || !this.selection || !e.touches || !e.touches.length) return
-      d.y = e.touches[0].clientY
-      if (Math.abs(d.y - d.y0) > TAP_SLOP_PX) d.moved = true
+      const touch = e.touches[0]
+      d.y = touch.clientY
+      if (Math.abs(touch.clientY - d.y0) > TAP_SLOP_PX || Math.abs(touch.clientX - d.x0) > TAP_SLOP_PX) d.moved = true
       this.applyDrag()
-      this.updateAutoScroll()
+      if (d.moved) this.updateAutoScroll()
     },
 
     onHandleEnd() {
       const d = this.drag
       this.drag = null
       this.stopAutoScroll()
-      if (!d || d.moved || !d.rect || !this.selection) return
-      // A tap on a dot: act on whatever is under the finger.
+      if (!d || d.moved) return
+      d.ended = true
+      if (d.rect) this.tapThrough(d)
+    },
+
+    onHandleCancel() {
+      this.drag = null
+      this.stopAutoScroll()
+    },
+
+    // A still tap on a dot acts on whatever lies under the finger:
+    // the selection itself, a neighbouring booking, or a free cell.
+    tapThrough(d) {
+      const s = this.selection
+      if (!s || !d.rect) return
       if (d.y0 >= d.rect.top && d.y0 <= d.rect.bottom) {
         this.onSelectionTap()
         return
       }
-      const s = this.selection
-      const offset = Math.floor((d.y0 - d.rect.top) / this.slotPx)
-      this.selectSlot(this.data.days.findIndex((day) => day.date === s.date), s.startMin + offset * SLOT)
+      const min = s.startMin + Math.floor((d.y0 - d.rect.top) / this.slotPx) * SLOT
+      const booking = this.bookingsOn(s.date).find((b) => b.startMin <= min && min < b.endMin)
+      if (booking) {
+        this.triggerEvent('bookingtap', { booking })
+        return
+      }
+      this.selectSlot(this.data.days.findIndex((day) => day.date === s.date), min)
     },
 
     applyDrag() {

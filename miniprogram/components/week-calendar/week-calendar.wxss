@@ -159,25 +159,30 @@
   color: #fff;
 }
 
-/* Invisible touch areas around the two dots, kept inside the day column. */
+/* Invisible touch areas around the two dots: a little outside the selection,
+   mostly inside it, and never over the neighbouring day. */
 .handle {
   position: absolute;
-  width: 56rpx;
-  height: 44rpx;
+  width: 64rpx;
+  height: 64rpx;
   display: flex;
-  align-items: center;
   justify-content: center;
+  box-sizing: border-box;
   z-index: 6;
 }
 
 .handle-top {
   top: -22rpx;
   left: 0;
+  align-items: flex-start;
+  padding-top: 10rpx;
 }
 
 .handle-bottom {
   bottom: -22rpx;
   right: 0;
+  align-items: flex-end;
+  padding-bottom: 10rpx;
 }
 
 .dot {

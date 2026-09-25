@@ -265,6 +265,13 @@ test('a retried request (same requestId) returns the booking it already made', a
   const again = await create({ requestId: 'req-1' })
   expect(again).toEqual(first)
   expect(state.docs.get('centrifuge_2026-09-28').data.bookings).toHaveLength(1)
+  // A retry after the user corrected the text keeps the latest text.
+  const edited = await create({ requestId: 'req-1', name: 'Maria S.' })
+  expect(edited.ok).toBe(true)
+  expect(edited.booking.id).toBe(first.booking.id)
+  expect(state.docs.get('centrifuge_2026-09-28').data.bookings.map((b) => b.name)).toEqual(['Maria S.'])
+  // The same id for another slot is not a retry.
+  expect(await create({ requestId: 'req-1', startMin: 720, endMin: 780 })).toEqual({ ok: false, code: 'BAD_REQUEST' })
   // Someone else reusing the id gets no special treatment.
   state.openid = 'user-2'
   expect(await create({ requestId: 'req-1' })).toEqual({ ok: false, code: 'CONFLICT' })
