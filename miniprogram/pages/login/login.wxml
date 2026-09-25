@@ -1,0 +1,104 @@
+<view class="page">
+  <image class="logo" src="/images/must-logo.png" mode="widthFix"></image>
+  <text class="lab">{{t.labName}}</text>
+
+  <!-- WeChat user -->
+  <block wx:if="{{mode === 'user'}}">
+    <view wx:if="{{step === 'start'}}" class="card">
+      <text class="card-title">{{t.userLogin}}</text>
+      <text class="hint">{{t.wechatLoginHint}}</text>
+      <button
+        class="btn btn-primary login-btn {{busy ? 'btn-disabled' : ''}}"
+        hover-class="btn-pressed"
+        open-type="agreePrivacyAuthorization"
+        bindtap="onWechatLogin"
+      >{{busy ? t.loggingIn : t.wechatLogin}}</button>
+      <view class="privacy">
+        <text>{{t.privacyPrefix}}</text>
+        <text class="link" bindtap="openPrivacy">{{t.privacyLink}}</text>
+      </view>
+    </view>
+
+    <view wx:else class="card">
+      <text class="card-title">{{t.profileTitle}}</text>
+      <text class="hint">{{t.profileHint}}</text>
+      <button class="avatar-btn" open-type="chooseAvatar" bind:chooseavatar="onChooseAvatar" hover-class="none">
+        <image class="avatar" src="{{avatar || '/images/icons/avatar.png'}}" mode="aspectFill"></image>
+        <text class="avatar-label">{{t.chooseAvatar}}</text>
+      </button>
+      <view class="field">
+        <text class="label">{{t.nickname}}</text>
+        <input
+          class="input {{error ? 'input-error' : ''}}"
+          type="nickname"
+          value="{{nickname}}"
+          maxlength="{{nicknameMax}}"
+          placeholder="{{t.nicknamePlaceholder}}"
+          placeholder-class="placeholder"
+          bindinput="onNickname"
+          bindblur="onNickname"
+          bindchange="onNickname"
+        />
+      </view>
+      <text wx:if="{{error}}" class="error">{{error}}</text>
+      <view class="btn btn-primary login-btn {{busy ? 'btn-disabled' : ''}}" hover-class="btn-pressed" bindtap="onSaveProfile" aria-role="button">
+        {{busy ? t.loggingIn : t.finishLogin}}
+      </view>
+    </view>
+  </block>
+
+  <!-- Administrator -->
+  <view wx:else class="card">
+    <text class="card-title">{{t.adminLogin}}</text>
+    <view class="field">
+      <text class="label">{{t.account}}</text>
+      <input
+        class="input"
+        value="{{account}}"
+        maxlength="64"
+        placeholder="{{t.accountPlaceholder}}"
+        placeholder-class="placeholder"
+        confirm-type="next"
+        bindinput="onAccount"
+      />
+    </view>
+    <view class="field">
+      <text class="label">{{t.password}}</text>
+      <input
+        class="input"
+        password
+        value="{{password}}"
+        maxlength="128"
+        placeholder="{{t.passwordPlaceholder}}"
+        placeholder-class="placeholder"
+        confirm-type="done"
+        bindinput="onPassword"
+        bindconfirm="onAdminLogin"
+      />
+    </view>
+    <text wx:if="{{error}}" class="error">{{error}}</text>
+    <view class="btn btn-primary login-btn {{busy ? 'btn-disabled' : ''}}" hover-class="btn-pressed" bindtap="onAdminLogin" aria-role="button">
+      {{busy ? t.loggingIn : t.login}}
+    </view>
+    <text wx:if="{{demoHint}}" class="demo">{{demoHint}}</text>
+  </view>
+</view>
+
+<!-- Shown when WeChat asks the user to agree to the privacy guidelines first. -->
+<view wx:if="{{privacyOpen}}" class="privacy-mask" catchtouchmove="noop">
+  <view class="privacy-box">
+    <text class="privacy-title">{{t.privacyTitle}}</text>
+    <text class="privacy-text">{{t.privacyContent}}</text>
+    <text class="link privacy-read" bindtap="openPrivacy">{{t.readPrivacy}}</text>
+    <view class="privacy-actions">
+      <button class="privacy-btn" hover-class="none" bindtap="onDisagreePrivacy">{{t.disagree}}</button>
+      <button
+        id="agree-privacy"
+        class="privacy-btn privacy-agree"
+        hover-class="none"
+        open-type="agreePrivacyAuthorization"
+        bindagreeprivacyauthorization="onAgreePrivacy"
+      >{{t.agree}}</button>
+    </view>
+  </view>
+</view>

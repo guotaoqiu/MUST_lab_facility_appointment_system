@@ -1,10 +1,13 @@
 module.exports = {
-  // Openids of lab administrators. They can cancel anyone's upcoming booking.
-  // Find your openid in the cloud database: it is the `openid` field of a
-  // booking you made (schedules collection).
-  ADMIN_OPENIDS: [],
+  // Administrator accounts for 管理員登入 (account + password).
+  // Store only password hashes. Create one with:
+  //   node scripts/hash-password.js 'your-password'
+  // and paste the printed value, e.g.
+  //   { account: 'admin', passwordHash: 'pbkdf2_sha256$100000$...$...' }
+  // Redeploy the cloud function after editing this file.
+  ADMIN_ACCOUNTS: [],
 
-  // Screen names and purposes with WeChat's content security API
-  // (security.msgSecCheck). If the API is unavailable the booking still goes through.
+  // Screen nicknames, names and purposes with WeChat's content security API
+  // (security.msgSecCheck). If the API is unavailable the request still goes through.
   CONTENT_CHECK: true
 }

@@ -1,8 +1,11 @@
 {
   "pages": [
     "pages/index/index",
+    "pages/login/login",
     "pages/booking/booking",
-    "pages/confirm/confirm"
+    "pages/confirm/confirm",
+    "pages/settings/settings",
+    "pages/admin/admin"
   ],
   "window": {
     "navigationBarBackgroundColor": "#ffffff",

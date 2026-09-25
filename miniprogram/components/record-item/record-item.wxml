@@ -1,0 +1,34 @@
+<view class="item {{item.status === 'cancelled' ? 'item-cancelled' : ''}}">
+  <view class="head">
+    <text class="title">{{item.title}}</text>
+    <text class="tag tag-{{item.status}}">{{item.statusText}}</text>
+  </view>
+  <text class="when">{{item.when}}</text>
+  <view class="line">
+    <text class="label">{{t.bookedBy}}</text>
+    <text class="value">{{item.name}}</text>
+  </view>
+  <view class="line">
+    <text class="label">{{t.purpose}}</text>
+    <text class="value">{{item.purpose}}</text>
+  </view>
+  <view wx:if="{{item.user}}" class="line">
+    <text class="label">{{t.wechatUser}}</text>
+    <view class="value user">
+      <image class="avatar" src="{{item.user.avatar || '/images/icons/avatar.png'}}" mode="aspectFill"></image>
+      <text class="nick">{{item.user.nickname || '—'}}</text>
+      <text class="openid">{{item.user.id}}</text>
+    </view>
+  </view>
+  <view wx:if="{{item.bookedAt}}" class="line">
+    <text class="label">{{t.bookedAt}}</text>
+    <text class="value muted">{{item.bookedAt}}</text>
+  </view>
+  <view wx:if="{{item.cancelNote}}" class="line">
+    <text class="label">{{t.cancelledAt}}</text>
+    <text class="value muted">{{item.cancelNote}}</text>
+  </view>
+  <view wx:if="{{item.canCancel}}" class="actions">
+    <view class="cancel" hover-class="cancel-pressed" bindtap="onCancel" aria-role="button">{{t.cancelBooking}}</view>
+  </view>
+</view>

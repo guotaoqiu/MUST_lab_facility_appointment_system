@@ -165,6 +165,17 @@
   text-overflow: ellipsis;
 }
 
+.tag-suspended {
+  align-self: flex-start;
+  margin-top: 6rpx;
+  padding: 0 12rpx;
+  border-radius: 6rpx;
+  font-size: 22rpx;
+  line-height: 34rpx;
+  color: var(--danger);
+  background: #fdf0f0;
+}
+
 .empty {
   padding: 80rpx 32rpx;
   text-align: center;

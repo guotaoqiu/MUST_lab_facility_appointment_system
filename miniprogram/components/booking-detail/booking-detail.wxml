@@ -27,6 +27,18 @@
       <text class="key">{{t.purpose}}</text>
       <text class="value">{{view.purpose}}</text>
     </view>
+    <view wx:if="{{view.user}}" class="row">
+      <text class="key">{{t.wechatUser}}</text>
+      <view class="value user">
+        <image class="avatar" src="{{view.user.avatar || '/images/icons/avatar.png'}}" mode="aspectFill"></image>
+        <text class="nick">{{view.user.nickname || '—'}}</text>
+        <text class="openid">{{view.user.id}}</text>
+      </view>
+    </view>
+    <view wx:if="{{view.bookedAt}}" class="row">
+      <text class="key">{{t.bookedAt}}</text>
+      <text class="value">{{view.bookedAt}}</text>
+    </view>
   </view>
 
   <view class="actions">

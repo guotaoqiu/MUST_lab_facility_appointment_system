@@ -1,0 +1,159 @@
+.page {
+  padding-bottom: calc(48rpx + env(safe-area-inset-bottom));
+}
+
+.profile {
+  display: flex;
+  align-items: center;
+  padding: 40rpx 32rpx;
+  background: #fff;
+}
+
+.avatar {
+  flex: 0 0 112rpx;
+  width: 112rpx;
+  height: 112rpx;
+  border-radius: 50%;
+  background: var(--bg);
+}
+
+.profile-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  margin-left: 28rpx;
+}
+
+.profile-name {
+  font-size: 36rpx;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.role {
+  margin-top: 10rpx;
+  padding: 2rpx 14rpx;
+  border-radius: 6rpx;
+  font-size: 22rpx;
+  line-height: 36rpx;
+}
+
+.role-user {
+  color: var(--must-blue);
+  background: var(--must-blue-soft);
+}
+
+.role-admin {
+  color: var(--must-gold-text);
+  background: var(--must-gold-soft);
+}
+
+.section {
+  margin-top: 24rpx;
+  background: #fff;
+}
+
+.section-head {
+  padding: 28rpx 32rpx 8rpx;
+}
+
+.section-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.tabs {
+  display: flex;
+  padding: 0 16rpx;
+  border-bottom: 1rpx solid var(--line);
+}
+
+.tab {
+  position: relative;
+  padding: 20rpx 16rpx;
+  margin-right: 16rpx;
+  font-size: 28rpx;
+  color: var(--text-2);
+}
+
+.tab-on {
+  color: var(--must-blue);
+  font-weight: 600;
+}
+
+.tab-on::after {
+  content: '';
+  position: absolute;
+  left: 16rpx;
+  right: 16rpx;
+  bottom: 0;
+  height: 6rpx;
+  border-radius: 3rpx;
+  background: var(--must-gold);
+}
+
+.count {
+  margin-left: 8rpx;
+  padding: 0 10rpx;
+  border-radius: 999rpx;
+  font-size: 20rpx;
+  line-height: 30rpx;
+  color: #fff;
+  background: var(--must-blue);
+}
+
+.empty {
+  padding: 64rpx 32rpx;
+  text-align: center;
+  font-size: 26rpx;
+  color: var(--text-3);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 104rpx;
+  padding: 16rpx 32rpx;
+  border-bottom: 1rpx solid var(--line);
+  box-sizing: border-box;
+}
+
+.row:last-child {
+  border-bottom: none;
+}
+
+.row-pressed {
+  background: var(--bg);
+}
+
+.row-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.row-title {
+  font-size: 30rpx;
+  color: var(--text);
+}
+
+.row-desc {
+  margin-top: 4rpx;
+  font-size: 24rpx;
+  color: var(--text-3);
+}
+
+.danger {
+  color: var(--danger);
+}
+
+.chevron {
+  width: 16rpx;
+  height: 16rpx;
+  border-top: 3rpx solid var(--text-3);
+  border-right: 3rpx solid var(--text-3);
+  transform: rotate(45deg);
+}

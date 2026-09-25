@@ -1,31 +1,73 @@
-const core = require('../miniprogram/utils/booking-core')
+const core = require('../miniprogram/shared/booking-core')
 
 // Friday 25 Sep 2026, 10:40 in Macau.
 const NOW = Date.parse('2026-09-25T02:40:00Z')
 const macau = (iso) => Date.parse(iso + '+08:00')
 
+const copy = (v) => (v == null ? v : JSON.parse(JSON.stringify(v)))
+
 function memoryStore() {
-  const days = {}
-  return {
-    days,
+  const s = { days: {}, records: {}, users: {}, statuses: {} }
+  return Object.assign(s, {
     async listDays(instrumentId, from, to) {
-      return Object.values(days).filter((d) => d.instrumentId === instrumentId && d.date >= from && d.date <= to)
+      return copy(Object.values(s.days).filter((d) => d.instrumentId === instrumentId && d.date >= from && d.date <= to))
     },
-    async updateDay(instrumentId, date, mutate) {
+    async updateDay(instrumentId, date, mutate, options) {
       const key = instrumentId + '_' + date
-      const outcome = mutate(core.normalizeDay(JSON.parse(JSON.stringify(days[key] || null))))
+      if (!s.days[key] && options && options.create === false) s.created = s.created || []
+      const outcome = mutate(core.normalizeDay(copy(s.days[key] || null)))
       if (outcome.error) return outcome
-      days[key] = Object.assign({ instrumentId, date }, outcome.day)
+      if (outcome.day) s.days[key] = Object.assign({ instrumentId, date }, copy(outcome.day))
+      ;(outcome.records || []).forEach((r) => {
+        s.records[r.id] = r.merge ? Object.assign({}, s.records[r.id], copy(r.data)) : copy(r.data)
+      })
       return outcome
+    },
+    async getUser(openid) {
+      return copy(s.users[openid] || null)
+    },
+    async saveUser(openid, user) {
+      s.users[openid] = copy(user)
+    },
+    async listRecords(q) {
+      return Object.keys(s.records)
+        .map((id) => Object.assign({}, copy(s.records[id]), { id }))
+        .filter((r) => (q.openid ? r.openid === q.openid : r.instrumentId === q.instrumentId && (!q.from || (r.date >= q.from && r.date <= q.to))))
+    },
+    async getStatuses() {
+      return copy(s.statuses)
+    },
+    async setStatus(id, status) {
+      s.statuses[id] = copy(status)
     }
-  }
+  })
 }
 
 function ctx(store, openid, extra) {
   return Object.assign(
-    { store, openid, isAdmin: false, nowMs: NOW, isInstrument: (id) => id === 'ball-mill' || id === 'centrifuge' },
+    {
+      store,
+      openid,
+      nowMs: NOW,
+      admins: { configured: true, verify: async (a, p) => a === 'admin' && p === 'secret' },
+      saveFile: async (bytes, name) => ({ path: '/tmp/' + name, bytes })
+    },
     extra
   )
+}
+
+const act = (store, openid, event, extra) => core.handleAction(event, ctx(store, openid, extra))
+const login = (store, openid, nickname = 'Nick-' + openid) => act(store, openid, { action: 'login', nickname })
+const adminLogin = (store, openid, extra) => act(store, openid, { action: 'adminLogin', account: 'admin', password: 'secret' }, extra)
+
+/** A store with users u1, u2, u3 logged in and 'admin' logged in as administrator. */
+async function setupStore() {
+  const store = memoryStore()
+  await login(store, 'u1', '大文')
+  await login(store, 'u2')
+  await login(store, 'u3')
+  await adminLogin(store, 'admin')
+  return store
 }
 
 const request = (extra) =>
@@ -140,104 +182,297 @@ describe('findConflict', () => {
   })
 })
 
-describe('handleAction', () => {
-  test('create then list; the booker sees it as theirs, others do not', async () => {
+describe('login and profiles', () => {
+  test('first login asks for a profile, later logins do not', async () => {
     const store = memoryStore()
-    const created = await core.handleAction(request(), ctx(store, 'u1'))
-    expect(created.ok).toBe(true)
-    expect(created.booking).toMatchObject({ instrumentId: 'ball-mill', date: '2026-09-28', startMin: 600, endMin: 720, mine: true, canCancel: true })
-
-    const mine = await core.handleAction({ action: 'list', instrumentId: 'ball-mill' }, ctx(store, 'u1'))
-    const theirs = await core.handleAction({ action: 'list', instrumentId: 'ball-mill' }, ctx(store, 'u2'))
-    expect(mine.bookings).toHaveLength(1)
-    expect(mine.bookings[0].mine).toBe(true)
-    expect(theirs.bookings[0]).toMatchObject({ name: '陳大文', purpose: '研磨粉煤灰', mine: false, canCancel: false })
-    expect(theirs.serverTime).toBe(NOW)
+    expect(await act(store, 'u1', { action: 'login' })).toMatchObject({ ok: true, needsProfile: true, me: { loggedIn: false } })
+    expect(await act(store, 'u1', { action: 'login', nickname: '  ' })).toEqual({ ok: false, code: 'NICKNAME_REQUIRED' })
+    expect(await act(store, 'u1', { action: 'login', nickname: 'x'.repeat(21) })).toEqual({ ok: false, code: 'NICKNAME_TOO_LONG' })
+    const res = await act(store, 'u1', { action: 'login', nickname: ' 大文 ', avatar: 'cloud://a.jpg' })
+    expect(res.me).toEqual({ loggedIn: true, nickname: '大文', avatar: 'cloud://a.jpg', isAdmin: false, account: '' })
+    const again = await act(store, 'u1', { action: 'login' })
+    expect(again.needsProfile).toBeUndefined()
+    expect(again.me.nickname).toBe('大文')
+    expect(store.users.u1.createdAt).toBe(NOW)
   })
 
-  test('list never exposes openids', async () => {
+  test('avatars must be of the allowed kind and nicknames pass the content check', async () => {
     const store = memoryStore()
-    await core.handleAction(request(), ctx(store, 'secret-openid'))
-    const res = await core.handleAction({ action: 'list', instrumentId: 'ball-mill' }, ctx(store, 'u2'))
-    expect(JSON.stringify(res)).not.toContain('secret-openid')
+    const strict = { isAvatarAllowed: (a) => a.indexOf('cloud://') === 0 }
+    expect(await act(store, 'u1', { action: 'login', nickname: 'A', avatar: 'https://evil/pixel.png' }, strict)).toEqual({ ok: false, code: 'BAD_REQUEST' })
+    expect(await act(store, 'u1', { action: 'login', nickname: 'A', avatar: 'a b' })).toEqual({ ok: false, code: 'BAD_REQUEST' })
+    const checkText = jest.fn().mockResolvedValue(false)
+    expect(await act(store, 'u1', { action: 'login', nickname: 'Bad' }, { checkText })).toEqual({ ok: false, code: 'CONTENT_REJECTED' })
+  })
+
+  test('calls without a WeChat identity and unknown actions are refused', async () => {
+    const store = memoryStore()
+    expect(await act(store, '', { action: 'me' })).toEqual({ ok: false, code: 'UNAUTHORIZED' })
+    expect(await act(store, 'u1', { action: 'drop' })).toEqual({ ok: false, code: 'BAD_REQUEST' })
+    expect(await act(store, 'u1', { action: 'constructor' })).toEqual({ ok: false, code: 'BAD_REQUEST' })
+    expect(await core.handleAction(null, ctx(store, 'u1'))).toEqual({ ok: false, code: 'BAD_REQUEST' })
+  })
+})
+
+describe('administrator login', () => {
+  test('right password: an admin for a week; logout ends it', async () => {
+    const store = memoryStore()
+    const res = await adminLogin(store, 'a1')
+    expect(res).toMatchObject({ ok: true, me: { isAdmin: true, account: 'admin', loggedIn: false } })
+    expect((await act(store, 'a1', { action: 'me' })).me.isAdmin).toBe(true)
+    const weekLater = NOW + 7 * 24 * 3600 * 1000 + 1
+    expect((await act(store, 'a1', { action: 'me' }, { nowMs: weekLater })).me.isAdmin).toBe(false)
+    expect((await act(store, 'a1', { action: 'logout' })).me.isAdmin).toBe(false)
+    expect((await act(store, 'a1', { action: 'me' })).me.isAdmin).toBe(false)
+  })
+
+  test('five wrong passwords lock the WeChat account for 15 minutes', async () => {
+    const store = memoryStore()
+    const wrong = () => act(store, 'a1', { action: 'adminLogin', account: 'admin', password: 'nope' })
+    for (let left = 4; left >= 1; left--) expect(await wrong()).toEqual({ ok: false, code: 'INVALID_CREDENTIALS', attemptsLeft: left })
+    expect(await wrong()).toEqual({ ok: false, code: 'TOO_MANY_ATTEMPTS', retryAfterMin: 15 })
+    expect(await adminLogin(store, 'a1')).toEqual({ ok: false, code: 'TOO_MANY_ATTEMPTS', retryAfterMin: 15 })
+    expect((await adminLogin(store, 'a1', { nowMs: NOW + 16 * 60 * 1000 })).ok).toBe(true)
+    // Other WeChat accounts are not affected.
+    expect((await adminLogin(store, 'a2')).ok).toBe(true)
+  })
+
+  test('missing fields and unconfigured accounts', async () => {
+    const store = memoryStore()
+    expect(await act(store, 'a1', { action: 'adminLogin', account: '', password: 'x' })).toEqual({ ok: false, code: 'CREDENTIALS_REQUIRED' })
+    expect(await act(store, 'a1', { action: 'adminLogin', account: 'admin' })).toEqual({ ok: false, code: 'CREDENTIALS_REQUIRED' })
+    expect(await adminLogin(store, 'a1', { admins: { configured: false } })).toEqual({ ok: false, code: 'ADMIN_NOT_CONFIGURED' })
+  })
+})
+
+describe('bookings', () => {
+  test('booking needs a logged-in user or an admin', async () => {
+    const store = memoryStore()
+    expect(await act(store, 'u9', request())).toEqual({ ok: false, code: 'NOT_LOGGED_IN' })
+    await adminLogin(store, 'a1')
+    expect((await act(store, 'a1', request())).ok).toBe(true)
+  })
+
+  test('create then list; the booker sees it as theirs, others do not', async () => {
+    const store = await setupStore()
+    const created = await act(store, 'u1', request())
+    expect(created.booking).toMatchObject({ instrumentId: 'ball-mill', date: '2026-09-28', startMin: 600, endMin: 720, mine: true, canCancel: true })
+
+    const mine = await act(store, 'u1', { action: 'list', instrumentId: 'ball-mill' })
+    const theirs = await act(store, 'u2', { action: 'list', instrumentId: 'ball-mill' })
+    expect(mine.bookings[0].mine).toBe(true)
+    expect(theirs.bookings[0]).toEqual({
+      id: created.booking.id,
+      instrumentId: 'ball-mill',
+      date: '2026-09-28',
+      startMin: 600,
+      endMin: 720,
+      name: '陳大文',
+      purpose: '研磨粉煤灰',
+      mine: false,
+      canCancel: false
+    })
+    expect(theirs.serverTime).toBe(NOW)
+    expect(theirs.me).toMatchObject({ loggedIn: true, isAdmin: false })
+  })
+
+  test('only administrators see which WeChat user made a booking', async () => {
+    const store = await setupStore()
+    await act(store, 'u1', request())
+    const asUser = await act(store, 'u2', { action: 'list', instrumentId: 'ball-mill' })
+    expect(asUser.bookings[0].openid).toBeUndefined()
+    expect(asUser.bookings[0].nickname).toBeUndefined()
+    expect(JSON.stringify(asUser)).not.toContain('"u1"')
+    const asAdmin = await act(store, 'admin', { action: 'list', instrumentId: 'ball-mill' })
+    expect(asAdmin.bookings[0]).toMatchObject({ openid: 'u1', nickname: '大文', createdAt: NOW, canCancel: true })
+  })
+
+  test('each booking is also kept as a record', async () => {
+    const store = await setupStore()
+    const { booking } = await act(store, 'u1', request())
+    expect(store.records[booking.id]).toMatchObject({
+      instrumentId: 'ball-mill',
+      date: '2026-09-28',
+      startMin: 600,
+      endMin: 720,
+      openid: 'u1',
+      nickname: '大文',
+      status: 'active',
+      createdAt: NOW
+    })
   })
 
   test('list is limited to the booking window and sorted', async () => {
-    const store = memoryStore()
+    const store = await setupStore()
     store.days['ball-mill_2026-10-05'] = { instrumentId: 'ball-mill', date: '2026-10-05', bookings: [{ id: 'late', startMin: 600, endMin: 660 }] }
     store.days['ball-mill_2026-09-29'] = { instrumentId: 'ball-mill', date: '2026-09-29', bookings: [{ id: 'b', startMin: 900, endMin: 960 }, { id: 'a', startMin: 600, endMin: 660 }] }
     store.days['ball-mill_2026-09-22'] = { instrumentId: 'ball-mill', date: '2026-09-22', bookings: [{ id: 'past', startMin: 600, endMin: 660, openid: 'u1' }] }
-    const res = await core.handleAction({ action: 'list', instrumentId: 'ball-mill' }, ctx(store, 'u1'))
+    const res = await act(store, 'u1', { action: 'list', instrumentId: 'ball-mill' })
     expect(res.bookings.map((b) => b.id)).toEqual(['past', 'a', 'b'])
-    expect(res.bookings.find((b) => b.id === 'past')).toMatchObject({ mine: true, canCancel: false })
+    expect(res.bookings[0]).toMatchObject({ mine: true, canCancel: false })
   })
 
   test('overlapping bookings are refused, touching ones are fine', async () => {
-    const store = memoryStore()
-    await core.handleAction(request(), ctx(store, 'u1'))
-    expect(await core.handleAction(request({ startMin: 690, endMin: 750 }), ctx(store, 'u2'))).toEqual({ ok: false, code: 'CONFLICT' })
-    expect((await core.handleAction(request({ startMin: 720, endMin: 780 }), ctx(store, 'u2'))).ok).toBe(true)
-    // Same time on another instrument is independent.
-    expect((await core.handleAction(request({ instrumentId: 'centrifuge' }), ctx(store, 'u2'))).ok).toBe(true)
+    const store = await setupStore()
+    await act(store, 'u1', request())
+    expect(await act(store, 'u2', request({ startMin: 690, endMin: 750 }))).toEqual({ ok: false, code: 'CONFLICT' })
+    expect((await act(store, 'u2', request({ startMin: 720, endMin: 780 }))).ok).toBe(true)
+    expect((await act(store, 'u2', request({ instrumentId: 'centrifuge' }))).ok).toBe(true)
     expect(store.days['ball-mill_2026-09-28'].bookings.map((b) => b.startMin)).toEqual([600, 720])
   })
 
-  test('requests without an openid or with unknown instruments are refused', async () => {
-    const store = memoryStore()
-    expect(await core.handleAction(request(), ctx(store, ''))).toEqual({ ok: false, code: 'UNAUTHORIZED' })
-    expect(await core.handleAction(request({ instrumentId: 'nope' }), ctx(store, 'u1'))).toEqual({ ok: false, code: 'BAD_INSTRUMENT' })
-    expect(await core.handleAction({ action: 'list', instrumentId: 'nope' }, ctx(store, 'u1'))).toEqual({ ok: false, code: 'BAD_INSTRUMENT' })
-    expect(await core.handleAction({ action: 'drop' }, ctx(store, 'u1'))).toEqual({ ok: false, code: 'BAD_REQUEST' })
-    expect(await core.handleAction(null, ctx(store, 'u1'))).toEqual({ ok: false, code: 'BAD_REQUEST' })
-  })
-
-  test('validation errors are passed through', async () => {
-    const res = await core.handleAction(request({ purpose: ' ' }), ctx(memoryStore(), 'u1'))
-    expect(res).toEqual({ ok: false, code: 'PURPOSE_REQUIRED' })
+  test('bad input is refused', async () => {
+    const store = await setupStore()
+    expect(await act(store, 'u1', request({ instrumentId: 'nope' }))).toEqual({ ok: false, code: 'BAD_INSTRUMENT' })
+    expect(await act(store, 'u1', { action: 'list', instrumentId: 'nope' })).toEqual({ ok: false, code: 'BAD_INSTRUMENT' })
+    expect(await act(store, 'u1', request({ purpose: ' ' }))).toEqual({ ok: false, code: 'PURPOSE_REQUIRED' })
+    expect(await act(store, 'u1', request({ requestId: 'bad id' }))).toEqual({ ok: false, code: 'BAD_REQUEST' })
   })
 
   test('content check can reject a booking', async () => {
-    const store = memoryStore()
+    const store = await setupStore()
     const checkText = jest.fn().mockResolvedValue(false)
-    expect(await core.handleAction(request(), ctx(store, 'u1', { checkText }))).toEqual({ ok: false, code: 'CONTENT_REJECTED' })
+    expect(await act(store, 'u1', request(), { checkText })).toEqual({ ok: false, code: 'CONTENT_REJECTED' })
     expect(checkText).toHaveBeenCalledWith('陳大文\n研磨粉煤灰')
     expect(store.days).toEqual({})
   })
 
-  test('only the owner or an admin can cancel, and only before the booking ends', async () => {
-    const store = memoryStore()
-    const { booking } = await core.handleAction(request(), ctx(store, 'u1'))
+  test('only the owner or an admin can cancel; the record keeps who did it', async () => {
+    const store = await setupStore()
+    const { booking } = await act(store, 'u1', request())
     const cancel = { action: 'cancel', instrumentId: 'ball-mill', date: booking.date, id: booking.id }
+    expect(await act(store, 'u2', cancel)).toEqual({ ok: false, code: 'FORBIDDEN' })
+    expect(await act(store, 'admin', cancel)).toEqual({ ok: true })
+    expect(await act(store, 'u1', cancel)).toEqual({ ok: false, code: 'NOT_FOUND' })
+    expect(store.days['ball-mill_2026-09-28'].bookings).toEqual([])
+    expect(store.records[booking.id]).toMatchObject({ status: 'cancelled', cancelledAt: NOW, cancelledBy: 'admin', cancelledByName: 'admin' })
 
-    expect(await core.handleAction(cancel, ctx(store, 'u2'))).toEqual({ ok: false, code: 'FORBIDDEN' })
-    expect(await core.handleAction(cancel, ctx(store, 'admin', { isAdmin: true }))).toEqual({ ok: true })
-    expect(await core.handleAction(cancel, ctx(store, 'u1'))).toEqual({ ok: false, code: 'NOT_FOUND' })
-
-    const day = store.days['ball-mill_2026-09-28']
-    expect(day.bookings).toEqual([])
-    expect(day.cancelled[0]).toMatchObject({ id: booking.id, openid: 'u1', cancelledBy: 'admin', cancelledAt: NOW })
-
-    // The slot is free again.
-    expect((await core.handleAction(request(), ctx(store, 'u3'))).ok).toBe(true)
+    const again = await act(store, 'u3', request())
+    await act(store, 'u3', { action: 'cancel', instrumentId: 'ball-mill', date: '2026-09-28', id: again.booking.id })
+    expect(store.records[again.booking.id]).toMatchObject({ cancelledBy: 'self', cancelledByName: 'Nick-u3' })
   })
 
   test('a booking that has ended cannot be cancelled', async () => {
-    const store = memoryStore()
+    const store = await setupStore()
     store.days['ball-mill_2026-09-25'] = {
       instrumentId: 'ball-mill',
       date: '2026-09-25',
       bookings: [{ id: 'old', startMin: 540, endMin: 600, openid: 'u1' }, { id: 'now', startMin: 600, endMin: 660, openid: 'u1' }]
     }
-    const cancel = (id) => core.handleAction({ action: 'cancel', instrumentId: 'ball-mill', date: '2026-09-25', id }, ctx(store, 'u1'))
+    const cancel = (id) => act(store, 'u1', { action: 'cancel', instrumentId: 'ball-mill', date: '2026-09-25', id })
     expect(await cancel('old')).toEqual({ ok: false, code: 'ALREADY_ENDED' })
     expect(await cancel('now')).toEqual({ ok: true })
   })
 
   test('malformed cancel requests are refused', async () => {
-    const store = memoryStore()
-    const c = ctx(store, 'u1')
-    expect(await core.handleAction({ action: 'cancel', instrumentId: 'ball-mill', date: 'x', id: 'a' }, c)).toEqual({ ok: false, code: 'BAD_REQUEST' })
-    expect(await core.handleAction({ action: 'cancel', instrumentId: 'ball-mill', date: '2026-09-28', id: 5 }, c)).toEqual({ ok: false, code: 'BAD_REQUEST' })
-    expect(await core.handleAction({ action: 'cancel', instrumentId: 'ball-mill', date: '2026-09-28' }, ctx(store, ''))).toEqual({ ok: false, code: 'UNAUTHORIZED' })
+    const store = await setupStore()
+    expect(await act(store, 'u1', { action: 'cancel', instrumentId: 'ball-mill', date: 'x', id: 'a' })).toEqual({ ok: false, code: 'BAD_REQUEST' })
+    expect(await act(store, 'u1', { action: 'cancel', instrumentId: 'ball-mill', date: '2026-09-28', id: 5 })).toEqual({ ok: false, code: 'BAD_REQUEST' })
+    expect(await act(store, 'u1', { action: 'cancel', instrumentId: 'ball-mill', date: '2030-01-01', id: 'a' })).toEqual({ ok: false, code: 'NOT_FOUND' })
+  })
+})
+
+describe('my bookings', () => {
+  test('upcoming (soonest first) and history (latest first, incl. cancelled)', async () => {
+    const store = await setupStore()
+    const a = (await act(store, 'u1', request({ date: '2026-09-30' }))).booking
+    const b = (await act(store, 'u1', request({ date: '2026-09-28' }))).booking
+    const c = (await act(store, 'u1', request({ date: '2026-09-29' }))).booking
+    await act(store, 'u1', { action: 'cancel', instrumentId: 'ball-mill', date: c.date, id: c.id })
+    await act(store, 'u2', request({ date: '2026-10-01' }))
+    store.records.old = { instrumentId: 'centrifuge', date: '2026-09-01', startMin: 600, endMin: 660, openid: 'u1', status: 'active', name: 'X', purpose: 'Y' }
+
+    const res = await act(store, 'u1', { action: 'myBookings' })
+    expect(res.upcoming.map((r) => [r.id, r.status, r.canCancel])).toEqual([[b.id, 'booked', true], [a.id, 'booked', true]])
+    expect(res.history.map((r) => [r.id, r.status, r.canCancel])).toEqual([[c.id, 'cancelled', false], ['old', 'completed', false]])
+    expect(res.history[0].cancelledBy).toBe('self')
+    expect(JSON.stringify(res)).not.toContain('openid')
+  })
+})
+
+describe('administration', () => {
+  test('records of an instrument by month, with who booked, including cancelled', async () => {
+    const store = await setupStore()
+    const a = (await act(store, 'u1', request())).booking
+    const b = (await act(store, 'u2', request({ startMin: 780, endMin: 840 }))).booking
+    await act(store, 'u2', { action: 'cancel', instrumentId: 'ball-mill', date: b.date, id: b.id })
+    await act(store, 'u3', request({ date: '2026-10-01' }))
+    await act(store, 'u3', request({ instrumentId: 'centrifuge' }))
+
+    expect(await act(store, 'u1', { action: 'adminRecords', instrumentId: 'ball-mill', month: '2026-09' })).toEqual({ ok: false, code: 'ADMIN_REQUIRED' })
+    expect(await act(store, 'admin', { action: 'adminRecords', instrumentId: 'ball-mill', month: '2026-9' })).toEqual({ ok: false, code: 'BAD_REQUEST' })
+
+    const res = await act(store, 'admin', { action: 'adminRecords', instrumentId: 'ball-mill', month: '2026-09' })
+    expect(res.records.map((r) => [r.id, r.status, r.openid, r.nickname])).toEqual([
+      [a.id, 'booked', 'u1', '大文'],
+      [b.id, 'cancelled', 'u2', 'Nick-u2']
+    ])
+    expect(res.summary).toEqual({ total: 2, active: 1, cancelled: 1, hours: 2 })
+    expect(res.records[1]).toMatchObject({ cancelledBy: 'self', cancelledByName: 'Nick-u2' })
+    const oct = await act(store, 'admin', { action: 'adminRecords', instrumentId: 'ball-mill', month: '2026-10' })
+    expect(oct.records).toHaveLength(1)
+  })
+
+  test('suspending an instrument stops new bookings until it is resumed', async () => {
+    const store = await setupStore()
+    expect(await act(store, 'u1', { action: 'setSuspended', instrumentId: 'ball-mill', suspended: true })).toEqual({ ok: false, code: 'ADMIN_REQUIRED' })
+    expect(await act(store, 'admin', { action: 'setSuspended', instrumentId: 'ball-mill', suspended: true, reason: 'x'.repeat(51) })).toEqual({ ok: false, code: 'REASON_TOO_LONG' })
+    expect(await act(store, 'admin', { action: 'setSuspended', instrumentId: 'ball-mill', suspended: 'yes' })).toEqual({ ok: false, code: 'BAD_REQUEST' })
+
+    expect(await act(store, 'admin', { action: 'setSuspended', instrumentId: 'ball-mill', suspended: true, reason: ' 維修中 ' })).toEqual({
+      ok: true,
+      suspended: { reason: '維修中', since: NOW }
+    })
+    expect(store.statuses['ball-mill']).toMatchObject({ suspended: true, updatedBy: 'admin' })
+    expect((await act(store, 'u1', { action: 'list', instrumentId: 'centrifuge' })).suspended).toEqual({ 'ball-mill': { reason: '維修中', since: NOW } })
+    expect(await act(store, 'u1', request())).toEqual({ ok: false, code: 'SUSPENDED' })
+    expect((await act(store, 'u1', request({ instrumentId: 'centrifuge' }))).ok).toBe(true)
+
+    await act(store, 'admin', { action: 'setSuspended', instrumentId: 'ball-mill', suspended: false })
+    expect((await act(store, 'u1', { action: 'list', instrumentId: 'ball-mill' })).suspended).toEqual({})
+    expect((await act(store, 'u1', request())).ok).toBe(true)
+  })
+
+  test('export builds an Excel file of the month or of everything', async () => {
+    const store = await setupStore()
+    expect(await act(store, 'u1', { action: 'exportRecords', instrumentId: 'ball-mill', month: '2026-09' })).toEqual({ ok: false, code: 'ADMIN_REQUIRED' })
+    expect(await act(store, 'admin', { action: 'exportRecords', instrumentId: 'ball-mill', month: '2026-09' })).toEqual({ ok: false, code: 'NOTHING_TO_EXPORT' })
+
+    const { booking } = await act(store, 'u1', request())
+    await act(store, 'u1', { action: 'cancel', instrumentId: 'ball-mill', date: booking.date, id: booking.id })
+    await act(store, 'u2', request({ startMin: 840, endMin: 930, purpose: 'A & B <test>' }))
+    await act(store, 'u2', request({ date: '2026-10-02' }))
+
+    let saved
+    const saveFile = async (bytes, name) => {
+      saved = { bytes, name }
+      return { path: '/tmp/' + name }
+    }
+    const res = await act(store, 'admin', { action: 'exportRecords', instrumentId: 'ball-mill', month: '2026-09', lang: 'zh' }, { saveFile })
+    expect(res).toEqual({ ok: true, count: 2, file: { name: '立式行星球磨機_2026-09.xlsx', path: '/tmp/立式行星球磨機_2026-09.xlsx' } })
+    const text = Buffer.from(saved.bytes).toString('utf8')
+    expect(Buffer.from(saved.bytes.slice(0, 4)).toString('hex')).toBe('504b0304') // a ZIP (xlsx) file
+    ;['日期', '微信暱稱', '已取消', '大文', 'Nick-u2', 'u1', '10:00', '14:00', 'A &amp; B &lt;test&gt;', '2026-09-25 10:40'].forEach((s) =>
+      expect(text).toContain(s)
+    )
+
+    const all = await act(store, 'admin', { action: 'exportRecords', instrumentId: 'ball-mill', lang: 'en' }, { saveFile })
+    expect(all.count).toBe(3)
+    expect(all.file.name).toBe('VerticalPlanetaryBallMill_all.xlsx')
+    expect(Buffer.from(saved.bytes).toString('utf8')).toContain('WeChat nickname')
+  })
+
+  test('in the cloud the previous export of the same admin is deleted', async () => {
+    const store = await setupStore()
+    await act(store, 'u1', request())
+    const deleteFile = jest.fn()
+    let n = 0
+    const saveFile = async () => ({ fileID: 'cloud://export-' + ++n })
+    await act(store, 'admin', { action: 'exportRecords', instrumentId: 'ball-mill' }, { saveFile, deleteFile })
+    expect(deleteFile).not.toHaveBeenCalled()
+    const res = await act(store, 'admin', { action: 'exportRecords', instrumentId: 'ball-mill' }, { saveFile, deleteFile })
+    expect(deleteFile).toHaveBeenCalledWith('cloud://export-1')
+    expect(res.file.fileID).toBe('cloud://export-2')
+    expect(store.users.admin.lastExport).toBe('cloud://export-2')
   })
 })

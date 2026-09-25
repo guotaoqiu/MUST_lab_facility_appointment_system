@@ -1,19 +1,27 @@
-const core = require('../../utils/booking-core')
+const core = require('../../shared/booking-core')
 const i18n = require('../../utils/i18n')
 const clock = require('../../utils/clock')
+const session = require('../../utils/session')
+const records = require('../../utils/records')
 const service = require('../../services/booking')
-const instruments = require('../../data/instruments')
+const instruments = require('../../shared/instruments')
 
 const LAST_INSTRUMENT_KEY = 'lastInstrument'
 
-function viewInstrument(inst, lang) {
+function viewInstrument(inst, lang, suspended) {
   return {
     id: inst.id,
     name: i18n.instrumentName(inst, lang),
     meta: [inst.model, inst.location].filter(Boolean).join(' · '),
     photo: inst.photo,
+    suspended: !!(suspended && suspended[inst.id]),
     search: [inst.name.zh, inst.name.en, inst.model, inst.location].join(' ').toLowerCase()
   }
+}
+
+// Somebody who is not signed in (or no longer is): back to the sign-in choice.
+function toLogin() {
+  wx.reLaunch({ url: '/pages/index/index?login=1' })
 }
 
 function formatSelection(selection, lang) {
@@ -32,6 +40,8 @@ Component({
     lang: 'zh',
     t: {},
     demo: false,
+    isAdmin: false,
+    suspendedText: '', // the current instrument is not taking bookings
     list: [], // instruments for the side menu
     drawerOpen: false,
     current: null, // selected instrument
@@ -54,6 +64,12 @@ Component({
     onLoad(query) {
       this.bookings = []
       this.loadSeq = 0
+      this.suspended = {}
+      if (!session.get()) {
+        this.leaving = true
+        toLogin()
+        return
+      }
       this.setData({ demo: service.isDemo() })
       this.applyLang()
 
@@ -68,6 +84,7 @@ Component({
     },
 
     onReady() {
+      if (this.leaving) return
       // Always start from the side menu (the last instrument is pre-selected).
       // Opening it after the first render lets it slide in and lets the
       // page-container that catches the back key notice the change.
@@ -75,6 +92,7 @@ Component({
     },
 
     onShow() {
+      if (this.leaving) return
       this.navigating = false
       this.applyLang()
       if (this.data.current) this.load()
@@ -95,7 +113,7 @@ Component({
     },
 
     onShareAppMessage() {
-      return { title: this.data.t.navBooking, path: '/pages/booking/booking' }
+      return { title: this.data.t.labName, path: '/pages/index/index' }
     },
 
     applyLang() {
@@ -104,19 +122,17 @@ Component({
       wx.setNavigationBarTitle({ title: t.navBooking })
       const current = this.data.current
       const inst = current && instruments.find((i) => i.id === current.id)
+      const suspended = inst && this.suspended[inst.id]
       this.setData({
         lang,
         t,
-        list: instruments.map((i) => viewInstrument(i, lang)),
-        current: inst ? viewInstrument(inst, lang) : null,
+        isAdmin: session.isAdmin(),
+        list: instruments.map((i) => viewInstrument(i, lang, this.suspended)),
+        current: inst ? viewInstrument(inst, lang, this.suspended) : null,
+        suspendedText: suspended ? t.suspendedBanner + (suspended.reason ? (lang === 'zh' ? '：' : ': ') + suspended.reason : '') : '',
         selectionText: formatSelection(this.data.selection, lang)
       })
       this.refreshNow()
-    },
-
-    onLangChange(e) {
-      i18n.setLang(e.detail.lang)
-      this.applyLang()
     },
 
     // Recompute today, the two weeks and the visible days.
@@ -158,9 +174,15 @@ Component({
         this.setData({ loadError: true })
         return
       }
+      if (!session.get()) {
+        toLogin()
+        return
+      }
       this.bookings = res.bookings
+      this.suspended = res.suspended || {}
       this.setData({ ready: true, loadError: false })
-      this.refreshNow()
+      if (this.suspended[current.id]) this.clearSelection()
+      this.applyLang()
       this.measureInsets()
     },
 
@@ -231,17 +253,30 @@ Component({
       this.setData({ selection: null, selectionText: null })
     },
 
-    goConfirm() {
-      const s = this.data.selection
-      const current = this.data.current
-      if (!s || !current || !this.data.ready || this.navigating) return
+    navigate(url) {
+      if (this.navigating) return // a quick double tap would open the page twice
       this.navigating = true
       wx.navigateTo({
-        url: '/pages/confirm/confirm?id=' + current.id + '&date=' + s.date + '&start=' + s.startMin + '&end=' + s.endMin,
+        url,
         fail: () => {
           this.navigating = false
         }
       })
+    },
+
+    goConfirm() {
+      const s = this.data.selection
+      const current = this.data.current
+      if (!s || !current || !this.data.ready || this.data.suspendedText) return
+      this.navigate('/pages/confirm/confirm?id=' + current.id + '&date=' + s.date + '&start=' + s.startMin + '&end=' + s.endMin)
+    },
+
+    goSettings() {
+      this.navigate('/pages/settings/settings')
+    },
+
+    goAdmin() {
+      this.navigate('/pages/admin/admin' + (this.data.current ? '?id=' + this.data.current.id : ''))
     },
 
     onBookingTap(e) {
@@ -260,7 +295,10 @@ Component({
           name: b.name,
           purpose: b.purpose,
           mine: b.mine,
-          canCancel: b.canCancel && !ended
+          canCancel: b.canCancel && !ended,
+          // Only administrators get these fields from the server.
+          user: b.openid ? { nickname: b.nickname, avatar: b.avatar, id: records.shortId(b.openid) } : null,
+          bookedAt: b.createdAt ? i18n.formatTimestamp(b.createdAt, lang) : ''
         }
       })
     },
@@ -289,6 +327,9 @@ Component({
           this.setData({ detail: null })
           if (res.ok) {
             wx.showToast({ title: t.cancelled, icon: 'success' })
+          } else if (res.code === 'NOT_LOGGED_IN') {
+            toLogin()
+            return
           } else {
             wx.showModal({
               title: t.noticeTitle,

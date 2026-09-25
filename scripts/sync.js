@@ -1,17 +1,17 @@
-// Copies what the cloud function shares with the mini program:
-//   miniprogram/utils/booking-core.js -> cloudfunctions/booking/booking-core.js
-//   instrument ids from miniprogram/data/instruments.js -> cloudfunctions/booking/instrument-ids.json
-// Run `npm run sync` after editing either source, then redeploy the cloud function.
+// Copies the code the cloud function shares with the mini program:
+//   miniprogram/shared/* -> cloudfunctions/booking/shared/
+// Run `npm run sync` after editing anything in miniprogram/shared, then
+// redeploy the `booking` cloud function.
 const fs = require('fs')
 const path = require('path')
 
 const root = path.join(__dirname, '..')
-const fnDir = path.join(root, 'cloudfunctions', 'booking')
+const from = path.join(root, 'miniprogram', 'shared')
+const to = path.join(root, 'cloudfunctions', 'booking', 'shared')
 
-fs.copyFileSync(path.join(root, 'miniprogram', 'utils', 'booking-core.js'), path.join(fnDir, 'booking-core.js'))
+fs.rmSync(to, { recursive: true, force: true })
+fs.mkdirSync(to, { recursive: true })
+const files = fs.readdirSync(from).filter((f) => f.endsWith('.js'))
+files.forEach((f) => fs.copyFileSync(path.join(from, f), path.join(to, f)))
 
-const instruments = require(path.join(root, 'miniprogram', 'data', 'instruments.js'))
-const ids = instruments.map((i) => i.id)
-fs.writeFileSync(path.join(fnDir, 'instrument-ids.json'), JSON.stringify(ids, null, 2) + '\n')
-
-console.log('Synced booking-core.js and ' + ids.length + ' instrument ids to cloudfunctions/booking')
+console.log('Synced ' + files.join(', ') + ' to cloudfunctions/booking/shared')

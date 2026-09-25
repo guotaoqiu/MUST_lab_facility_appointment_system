@@ -1,5 +1,5 @@
 const { useFixedNow, installWx, render, flush } = require('./support/harness')
-const core = require('../miniprogram/utils/booking-core')
+const core = require('../miniprogram/shared/booking-core')
 
 useFixedNow()
 

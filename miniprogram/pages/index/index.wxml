@@ -1,5 +1,12 @@
+<page-meta page-style="{{choiceOpen ? 'overflow: hidden;' : ''}}"></page-meta>
+
 <view class="home">
   <view class="top">
+    <view wx:if="{{session}}" class="me" hover-class="me-pressed" bindtap="goSettings" aria-role="button">
+      <image class="me-avatar" src="{{session.avatar || '/images/icons/avatar.png'}}" mode="aspectFill"></image>
+      <text class="me-name">{{session.role === 'admin' ? t.roleAdmin : session.nickname}}</text>
+    </view>
+    <view class="top-space"></view>
     <lang-switch id="lang" lang="{{lang}}" bind:change="onLangChange"></lang-switch>
   </view>
 
@@ -11,7 +18,7 @@
       <text class="lab-alt">{{t.labNameAlt}}</text>
     </view>
 
-    <view class="entry" hover-class="entry-pressed" bindtap="goBooking" aria-role="button">
+    <view class="entry" hover-class="entry-pressed" bindtap="onEntry" aria-role="button">
       <view class="entry-text">
         <text class="entry-title">{{t.enterBooking}}</text>
         <text class="entry-sub">{{t.enterBookingSub}}</text>
@@ -20,3 +27,35 @@
     </view>
   </view>
 </view>
+
+<!-- Sign-in choice -->
+<view class="mask {{choiceOpen ? 'mask-show' : ''}}" bindtap="closeChoice" catchtouchmove="noop"></view>
+<view class="sheet {{choiceOpen ? 'sheet-show' : ''}}" catchtouchmove="noop">
+  <text class="sheet-title">{{t.loginChoiceTitle}}</text>
+  <view class="choice" hover-class="choice-pressed" data-mode="user" bindtap="chooseLogin" aria-role="button">
+    <view class="choice-icon choice-icon-user"><view class="glyph-user"></view></view>
+    <view class="choice-text">
+      <text class="choice-title">{{t.userLogin}}</text>
+      <text class="choice-desc">{{t.userLoginDesc}}</text>
+    </view>
+    <view class="chevron"></view>
+  </view>
+  <view class="choice" hover-class="choice-pressed" data-mode="admin" bindtap="chooseLogin" aria-role="button">
+    <view class="choice-icon choice-icon-admin"><view class="glyph-lock"></view></view>
+    <view class="choice-text">
+      <text class="choice-title">{{t.adminLogin}}</text>
+      <text class="choice-desc">{{t.adminLoginDesc}}</text>
+    </view>
+    <view class="chevron"></view>
+  </view>
+  <view class="sheet-cancel" hover-class="choice-pressed" bindtap="closeChoice" aria-role="button">{{t.cancel}}</view>
+</view>
+
+<!-- Invisible: the back key closes the sheet first. -->
+<page-container
+  show="{{choiceOpen}}"
+  overlay="{{false}}"
+  duration="{{0}}"
+  custom-style="height: 0; overflow: hidden;"
+  bind:beforeleave="closeChoice"
+></page-container>

@@ -4,7 +4,7 @@
 // All vertical positions are whole pixels derived from one slot height.
 // WeChat rounds every rpx value separately, so mixing stacked rpx cells with
 // rpx offsets would make the rows drift away from the labels and blocks.
-const core = require('../../utils/booking-core')
+const core = require('../../shared/booking-core')
 
 const SLOT = core.SLOT_MINUTES
 const DAY_START = core.DAY_START_MINUTES

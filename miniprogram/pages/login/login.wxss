@@ -1,0 +1,204 @@
+page {
+  background: #fff;
+}
+
+.page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 72rpx 48rpx calc(48rpx + env(safe-area-inset-bottom));
+}
+
+.logo {
+  width: 400rpx;
+}
+
+.lab {
+  margin: 24rpx 0 56rpx;
+  font-size: 30rpx;
+  font-weight: 600;
+  color: var(--must-blue);
+}
+
+.card {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.card-title {
+  font-size: 40rpx;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.hint {
+  margin: 12rpx 0 48rpx;
+  font-size: 26rpx;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+
+/* <button> needs its default look removed. */
+button.login-btn {
+  width: 100%;
+  margin: 24rpx 0 0;
+  padding: 0;
+  line-height: 88rpx;
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #fff;
+  border-radius: 12rpx;
+}
+
+button.login-btn::after,
+button.avatar-btn::after,
+button.privacy-btn::after {
+  border: none;
+}
+
+.login-btn {
+  margin-top: 24rpx;
+}
+
+.privacy {
+  margin-top: 28rpx;
+  text-align: center;
+  font-size: 24rpx;
+  color: var(--text-3);
+}
+
+.link {
+  color: var(--must-blue);
+}
+
+button.avatar-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: auto;
+  margin: 0 auto 32rpx;
+  padding: 0;
+  background: transparent;
+  line-height: 1.4;
+}
+
+.avatar {
+  width: 160rpx;
+  height: 160rpx;
+  border-radius: 50%;
+  background: var(--bg);
+}
+
+.avatar-label {
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  color: var(--must-blue);
+}
+
+.field {
+  margin-top: 24rpx;
+}
+
+.label {
+  display: block;
+  margin-bottom: 12rpx;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.input {
+  width: 100%;
+  height: 88rpx;
+  padding: 0 24rpx;
+  border: 1rpx solid var(--line);
+  border-radius: 12rpx;
+  background: #fafbfc;
+  font-size: 30rpx;
+  color: var(--text);
+  box-sizing: border-box;
+}
+
+.input-error {
+  border-color: var(--danger);
+}
+
+.placeholder {
+  color: var(--text-3);
+}
+
+.error {
+  margin-top: 16rpx;
+  font-size: 26rpx;
+  color: var(--danger);
+}
+
+.demo {
+  margin-top: 32rpx;
+  padding: 16rpx 24rpx;
+  border-radius: 12rpx;
+  font-size: 24rpx;
+  color: var(--must-gold-text);
+  background: var(--must-gold-soft);
+}
+
+.privacy-mask {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 25, 40, 0.45);
+}
+
+.privacy-box {
+  width: 600rpx;
+  padding: 40rpx 40rpx 24rpx;
+  border-radius: 20rpx;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+}
+
+.privacy-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.privacy-text {
+  margin-top: 16rpx;
+  font-size: 28rpx;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+
+.privacy-read {
+  margin-top: 12rpx;
+  font-size: 26rpx;
+}
+
+.privacy-actions {
+  display: flex;
+  margin-top: 32rpx;
+}
+
+button.privacy-btn {
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  line-height: 80rpx;
+  font-size: 30rpx;
+  color: var(--text-2);
+  background: transparent;
+}
+
+button.privacy-agree {
+  color: var(--must-blue);
+  font-weight: 600;
+}

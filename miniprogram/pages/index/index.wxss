@@ -12,8 +12,41 @@ page {
 
 .top {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
   padding-top: 16rpx;
+}
+
+.top-space {
+  flex: 1;
+}
+
+.me {
+  display: flex;
+  align-items: center;
+  max-width: 400rpx;
+  padding: 6rpx 20rpx 6rpx 6rpx;
+  border-radius: 999rpx;
+  background: var(--bg);
+}
+
+.me-pressed {
+  background: var(--line);
+}
+
+.me-avatar {
+  width: 52rpx;
+  height: 52rpx;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.me-name {
+  margin-left: 12rpx;
+  font-size: 26rpx;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Logo, lab name and the entry button form one group in the middle of the screen. */
@@ -97,4 +130,176 @@ page {
   border-top: 4rpx solid var(--must-gold);
   border-right: 4rpx solid var(--must-gold);
   transform: rotate(45deg);
+}
+
+/* Sign-in choice sheet */
+.mask {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 100;
+  background: rgba(15, 25, 40, 0.4);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s, visibility 0.2s;
+}
+
+.mask-show {
+  opacity: 1;
+  visibility: visible;
+}
+
+.sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 101;
+  padding: 40rpx 32rpx calc(24rpx + env(safe-area-inset-bottom));
+  border-radius: 24rpx 24rpx 0 0;
+  background: #fff;
+  transform: translateY(105%);
+  transition: transform 0.25s ease-out;
+}
+
+.sheet-show {
+  transform: translateY(0);
+}
+
+.sheet-title {
+  display: block;
+  margin: 0 8rpx 24rpx;
+  font-size: 32rpx;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  margin-bottom: 20rpx;
+  padding: 28rpx 24rpx;
+  border: 1rpx solid var(--line);
+  border-radius: 16rpx;
+}
+
+.choice-pressed {
+  background: var(--bg);
+}
+
+.choice-icon {
+  flex: 0 0 80rpx;
+  width: 80rpx;
+  height: 80rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.choice-icon-user {
+  background: var(--must-blue);
+}
+
+.choice-icon-admin {
+  background: var(--must-gold);
+}
+
+/* Simple drawn glyphs: a person and a padlock */
+.glyph-user {
+  position: relative;
+  width: 36rpx;
+  height: 36rpx;
+}
+
+.glyph-user::before {
+  content: '';
+  position: absolute;
+  left: 10rpx;
+  top: 0;
+  width: 16rpx;
+  height: 16rpx;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.glyph-user::after {
+  content: '';
+  position: absolute;
+  left: 2rpx;
+  bottom: 0;
+  width: 32rpx;
+  height: 16rpx;
+  border-radius: 16rpx 16rpx 4rpx 4rpx;
+  background: #fff;
+}
+
+.glyph-lock {
+  position: relative;
+  width: 32rpx;
+  height: 36rpx;
+}
+
+.glyph-lock::before {
+  content: '';
+  position: absolute;
+  left: 7rpx;
+  top: 0;
+  width: 18rpx;
+  height: 18rpx;
+  border: 4rpx solid var(--must-blue-dark);
+  border-bottom: none;
+  border-radius: 12rpx 12rpx 0 0;
+  box-sizing: border-box;
+}
+
+.glyph-lock::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 32rpx;
+  height: 20rpx;
+  border-radius: 4rpx;
+  background: var(--must-blue-dark);
+}
+
+.choice-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  margin-left: 24rpx;
+}
+
+.choice-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.choice-desc {
+  margin-top: 4rpx;
+  font-size: 24rpx;
+  color: var(--text-2);
+}
+
+.chevron {
+  width: 16rpx;
+  height: 16rpx;
+  margin-left: 16rpx;
+  border-top: 3rpx solid var(--text-3);
+  border-right: 3rpx solid var(--text-3);
+  transform: rotate(45deg);
+}
+
+.sheet-cancel {
+  margin-top: 8rpx;
+  padding: 24rpx;
+  text-align: center;
+  font-size: 30rpx;
+  color: var(--text-2);
+  border-radius: 12rpx;
 }

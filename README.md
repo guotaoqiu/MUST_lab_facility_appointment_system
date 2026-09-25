@@ -2,21 +2,36 @@
 
 澳門科技大學可持續發展建材實驗室的微信小程序，用來預約實驗室儀器。介面支援**繁體中文**和 **English**，配色取自澳科大校徽（藍色＋金色）。
 
-| 首頁 | 選擇儀器 | 選擇時段 | 預約詳情 | 確認預約 | English |
-| --- | --- | --- | --- | --- | --- |
-| ![首頁](docs/screenshots/home-zh.jpg) | ![側邊欄](docs/screenshots/booking-drawer-zh.jpg) | ![日曆](docs/screenshots/booking-selected-zh.jpg) | ![詳情](docs/screenshots/booking-detail-zh.jpg) | ![確認](docs/screenshots/confirm-zh.jpg) | ![English](docs/screenshots/booking-selected-en.jpg) |
+| 首頁 | 選擇登入方式 | 用戶登入 | 管理員登入 |
+| --- | --- | --- | --- |
+| ![首頁](docs/screenshots/home-zh.jpg) | ![登入方式](docs/screenshots/home-choice-zh.jpg) | ![用戶登入](docs/screenshots/login-user-zh.jpg) | ![管理員登入](docs/screenshots/login-admin-zh.jpg) |
+
+| 選擇儀器 | 選擇時段 | 確認預約 | 設置：我的預約 |
+| --- | --- | --- | --- |
+| ![側邊欄](docs/screenshots/booking-drawer-zh.jpg) | ![日曆](docs/screenshots/booking-selected-zh.jpg) | ![確認](docs/screenshots/confirm-zh.jpg) | ![設置](docs/screenshots/settings-zh.jpg) |
+
+| 管理員：預約詳情 | 管理員：預約管理 | 暫停預約 | English |
+| --- | --- | --- | --- |
+| ![預約詳情](docs/screenshots/booking-admin-detail-zh.jpg) | ![預約管理](docs/screenshots/admin-zh.jpg) | ![暫停](docs/screenshots/booking-suspended-zh.jpg) | ![English](docs/screenshots/booking-selected-en.jpg) |
 
 （以上是測試工具渲染的預覽圖，實際效果以微信開發者工具為準。）
 
 ## 功能
 
 - **首頁**：澳科大 logo、實驗室名稱，中間一個按鈕進入「實驗室儀器預約系統」；右上角切換 繁 / EN。
-- **側邊欄選擇儀器**：23 台儀器（《儀器清單_2026-09-03》中黑色字的儀器），附照片、型號、地點，可搜尋中英文名稱、型號、地點。
-- **週曆**：可切換「本週 / 下週」，顯示每台儀器的佔用時段，以及預約人姓名和用途；點擊預約可看詳情。
-- **預約**：點擊空白格子（每格 30 分鐘）選擇時間，拖動上下圓點調整時長 → 填寫姓名、用途 → 確定預約 → 提示「預約成功」後回到週曆。
-- **取消**：自己的預約（金色）可在詳情中取消；管理員可取消任何人的預約。
+- **登入**：未登入時點按鈕會跳出兩個選項：
+  - **用戶登入**：微信一鍵登入；第一次登入時設定頭像和暱稱（管理員會看到）。
+  - **管理員登入**：帳號＋密碼。連續輸錯 5 次，該微信帳號會被鎖定 15 分鐘；登入有效期 7 天。
+- **側邊欄選擇儀器**：23 台儀器（《儀器清單_2026-09-03》中黑色字的儀器），附照片、型號、地點，可搜尋；暫停預約的儀器有標示。
+- **週曆**：本週 / 下週，顯示每台儀器的佔用時段、預約人姓名和用途。
+- **預約**：點擊空白格子（每格 30 分鐘）選擇時間，拖動上下圓點調整時長 → 填寫姓名、用途 → 確定預約 → 「預約成功」後回到週曆。
+- **設置**（右上角齒輪）：頭像、暱稱、身份；**我的預約**（即將到來 / 歷史記錄，可取消即將到來的預約）；語言；管理員入口；退出登入。
+- **管理員**：
+  - 週曆中點擊任何預約，可看到是哪個**微信用戶**（暱稱、頭像、微信用戶 ID）、用的什麼名字、用途、時間和預約時間，並可取消。
+  - **預約管理**頁（週曆右上角「管理」或 設置 → 預約管理）：按月份查看某儀器的全部預約記錄（包括已取消的、由誰取消）；
+    **匯出 Excel**（本月或全部記錄，可轉發或保存）；**暫停預約**（例如儀器壞了，可填原因），恢復時關閉開關即可。
 - 已過去的時段顯示灰色，紅線表示現在時間；時間一律以澳門時間（UTC+8）計算。
-- 兩人同時預約同一時段時，由雲函數在數據庫交易中檢查，後提交的一方會收到「該時段剛被其他人預約」；同時預約不同時段則都會成功。
+- 兩人同時預約同一時段時，由雲函數在數據庫交易中檢查，後提交的一方會收到「該時段剛被其他人預約」。
 
 ## 快速開始（演示模式）
 
@@ -24,7 +39,8 @@
 2. 「導入項目」，選擇本倉庫的根目錄（有 `project.config.json` 的目錄）。AppID 可先用測試號。
 3. 編譯即可使用。
 
-`miniprogram/config.js` 裡 `cloudEnv` 留空時是**演示模式**：預約只保存在本機，並附帶幾條示範預約，頁面頂部會顯示黃色提示條。
+`miniprogram/config.js` 裡 `cloudEnv` 留空時是**演示模式**：資料只保存在本機，附帶幾條示範預約，頁面頂部會顯示黃色提示條。
+演示模式的管理員帳號是 `admin`，密碼 `admin123`（只在演示模式有效）。
 
 ## 正式使用（微信雲開發）
 
@@ -38,69 +54,93 @@
    ```js
    cloudEnv: 'your-env-id',
    ```
-4. 在開發者工具左側右鍵 `cloudfunctions/booking` →「上傳並部署：雲端安裝依賴」。
-   （`cloudfunctions/booking/config.json` 把超時時間設為 10 秒；如控制台顯示的仍是 3 秒，可在雲函數的「版本與配置」中修改。）
-5. 雲開發控制台 →「數據庫」→ 新建集合 `schedules`（第一次預約時也會自動建立），
-   權限設定選「自定義安全規則」並填入：
-   ```json
-   { "read": false, "write": false }
+4. **設定管理員帳號**：在本倉庫根目錄執行（需要 Node.js）：
+   ```bash
+   node scripts/hash-password.js '你的密碼'
    ```
-   所有讀寫都經過雲函數，用戶端不能直接改資料。
-6. （可選）設定管理員：在 `cloudfunctions/booking/settings.js` 的 `ADMIN_OPENIDS` 填入管理員的 openid，重新部署雲函數。
-   openid 可在數據庫 `schedules` 中管理員自己預約那一條的 `openid` 欄位找到。
-7. 上傳代碼、提交審核。小程序會收集用戶自行填寫的姓名和用途，請在公眾平台的「用戶隱私保護指引」中說明。
+   把輸出的一行填入 `cloudfunctions/booking/settings.js`：
+   ```js
+   ADMIN_ACCOUNTS: [
+     { account: 'admin', passwordHash: 'pbkdf2_sha256$100000$...' }
+   ],
+   ```
+   可以設多個帳號。代碼中只保存密碼的雜湊值，不保存密碼本身。
+5. 在開發者工具左側右鍵 `cloudfunctions/booking` →「上傳並部署：雲端安裝依賴」。
+   （`cloudfunctions/booking/config.json` 把超時時間設為 10 秒；如控制台顯示的仍是 3 秒，可在雲函數的「版本與配置」中修改。）
+6. 雲開發控制台 →「數據庫」：以下 4 個集合在第一次使用時會自動建立，也可以手動建立。
+   每個集合的權限都選「自定義安全規則」並填入 `{ "read": false, "write": false }`（所有讀寫都經過雲函數）：
 
-任何打開小程序的微信用戶都可以預約，並看到預約人姓名和用途。`sitemap.json` 已設定不讓頁面內容被微信搜尋收錄；如只給實驗室成員使用，
-可在公眾平台的設定中關閉「允許被搜尋」，改為把小程序分享給成員。管理員可在預約詳情中取消任何人的預約。
+   | 集合 | 內容 | 建議索引 |
+   | --- | --- | --- |
+   | `schedules` | 每台儀器每天一份文件，用來檢查時段重疊 | — |
+   | `bookings` | 每個預約一條記錄（包括已取消的） | `openid` 升序；`instrumentId` 升序 + `date` 升序 |
+   | `users` | 微信用戶的暱稱、頭像、管理員登入狀態 | — |
+   | `instrument_status` | 儀器是否暫停預約及原因 | — |
 
-雲函數預設會用微信內容安全接口（`security.msgSecCheck`）檢查姓名和用途；如不需要，把 `settings.js` 裡的 `CONTENT_CHECK` 改為 `false`。
+7. **雲存儲**用來保存用戶頭像（`avatars/`）和匯出的 Excel（`exports/`，每位管理員只保留最近一份）。使用默認權限即可。
+8. 在公眾平台填寫「**用戶隱私保護指引**」：小程序會收集用戶的**微信暱稱、頭像**，以及用戶自行填寫的**姓名和預約用途**。
+   未填寫時，頭像和暱稱無法使用。
+9. 上傳代碼、提交審核。
+
+`sitemap.json` 已設定不讓頁面內容被微信搜尋收錄。如只給實驗室成員使用，可在公眾平台的設定中關閉「允許被搜尋」，改為把小程序分享給成員。
+
+雲函數預設會用微信內容安全接口（`security.msgSecCheck`）檢查暱稱、姓名和用途；如不需要，把 `settings.js` 裡的 `CONTENT_CHECK` 改為 `false`。
 
 ## 常見修改
 
 | 想修改 | 位置 |
 | --- | --- |
-| 儀器清單、名稱、型號、地點 | `miniprogram/data/instruments.js`，照片放在 `miniprogram/images/instruments/<id>.jpg` |
-| 可預約時間（預設 08:00–22:00）、每格時長、姓名/用途字數上限 | `miniprogram/utils/booking-core.js` 頂部的常數 |
+| 儀器清單、名稱、型號、地點 | `miniprogram/shared/instruments.js`，照片放在 `miniprogram/images/instruments/<id>.jpg` |
+| 可預約時間（預設 08:00–22:00）、每格時長、字數上限、管理員登入有效期和鎖定規則 | `miniprogram/shared/booking-core.js` 頂部的常數 |
+| 管理員帳號 | `cloudfunctions/booking/settings.js`（見上文第 4 步） |
 | 介面文字 | `miniprogram/i18n/zh.js`、`miniprogram/i18n/en.js` |
-| 顏色 | `miniprogram/app.wxss` 頂部的顏色變量；導航欄藍色另見 `pages/booking/booking.json`、`pages/confirm/confirm.json` 的 `navigationBarBackgroundColor`，取消對話框按鈕色見 `pages/booking/booking.js` 的 `confirmColor` |
+| Excel 欄位名稱 | `miniprogram/shared/booking-core.js` 的 `EXPORT_TEXT` |
+| 顏色 | `miniprogram/app.wxss` 頂部的顏色變量；導航欄藍色另見各頁面 `.json` 的 `navigationBarBackgroundColor`，取消對話框按鈕色見各頁面 `.js` 的 `confirmColor` |
 | 校徽圖片 | `miniprogram/images/must-logo.png`（目前由提供的截圖放大，略有模糊，建議換成學校提供的高清 PNG，四周留少量透明邊） |
 
-修改 `instruments.js` 或 `booking-core.js` 後，執行 `npm run sync`，再重新部署 `booking` 雲函數，雲函數才會使用新的儀器清單和規則。
+`miniprogram/shared/` 裡的文件由小程序和雲函數共用。修改後執行 `npm run sync`（複製到 `cloudfunctions/booking/shared/`），再重新部署 `booking` 雲函數。
 儀器的 `id` 會存進每條預約，已有的 `id` 請不要更改。
 
 ## 資料結構
 
-集合 `schedules`，每台儀器每天一份文件：
-
 ```js
-{
-  _id: 'centrifuge_2026-09-28',   // <儀器 id>_<日期>
-  instrumentId: 'centrifuge',
-  date: '2026-09-28',
-  bookings: [
-    { id, startMin: 600, endMin: 660, name: '陳大文', purpose: '…', openid, createdAt }
-  ],
-  cancelled: [ /* 已取消的預約，另加 cancelledAt、cancelledBy */ ],
-  updatedAt
-}
+// schedules：_id = '<儀器 id>_<日期>'，只放有效的預約，用來在交易中檢查重疊
+{ instrumentId: 'centrifuge', date: '2026-09-28',
+  bookings: [{ id, startMin: 600, endMin: 660, name, purpose, openid, nickname, avatar, createdAt }] }
+
+// bookings：_id = 預約 id，完整記錄（「我的預約」、管理員列表和 Excel 都讀這裡）
+{ instrumentId, date, startMin, endMin, name, purpose, openid, nickname, avatar, createdAt,
+  status: 'active' | 'cancelled', cancelledAt, cancelledBy: 'self' | 'admin', cancelledByName }
+
+// users：_id = openid
+{ nickname, avatar, createdAt, lastLoginAt,
+  admin: { account, since, expiresAt } | null,   // 管理員登入狀態
+  adminFail: { count, lockedUntil } | null }     // 密碼輸錯次數
+
+// instrument_status：_id = 儀器 id
+{ suspended: true, reason: '儀器維修中', updatedAt, updatedBy }
 ```
 
-`startMin` / `endMin` 是當天的分鐘數（600 = 10:00）。把一天的預約放在同一份文件裡，雲函數才能在一個交易中檢查重疊並寫入；
-遇到交易衝突會自動重試。每次預約帶一個 `requestId`，網絡不穩重試時不會重複預約。
+`startMin` / `endMin` 是當天的分鐘數（600 = 10:00）。預約和取消都在一個數據庫交易中同時寫入 `schedules` 和 `bookings`，
+遇到交易衝突會自動重試；每次預約帶一個 `requestId`，網絡不穩重試時不會重複預約。
 
 ## 目錄
 
 ```
 miniprogram/
-  pages/index        首頁
+  pages/index        首頁（選擇登入方式）
+  pages/login        用戶登入（微信）/ 管理員登入（帳號密碼）
   pages/booking      預約系統（側邊欄 + 週曆）
   pages/confirm      填寫姓名、用途並確認
-  components/        week-calendar、instrument-drawer、booking-detail、lang-switch
-  utils/booking-core.js  預約規則（與雲函數共用）
+  pages/settings     設置：我的預約、語言、退出登入
+  pages/admin        預約管理：全部記錄、匯出 Excel、暫停預約
+  components/        week-calendar、instrument-drawer、booking-detail、record-item、lang-switch
+  shared/            與雲函數共用：booking-core.js（規則和所有操作）、instruments.js、xlsx.js（產生 Excel）
   services/          呼叫雲函數；演示模式的本機儲存
-  data/instruments.js    儀器清單
+  utils/             語言、登入狀態、時間
   i18n/              繁體中文、English
-cloudfunctions/booking/  雲函數（list / create / cancel）
+cloudfunctions/booking/  雲函數
+scripts/             sync.js（同步共用文件）、hash-password.js（產生管理員密碼雜湊）
 tests/               自動化測試
 ```
 
@@ -111,9 +151,12 @@ npm install
 npm test
 ```
 
-測試用 [miniprogram-simulate](https://github.com/wechat-miniprogram/miniprogram-simulate) 和微信官方 WXML 編譯器渲染頁面，覆蓋預約規則、雲函數（包括同時預約、交易衝突重試）、週曆的點擊、拖動和自動捲動、不同螢幕寬度下的對齊，以及從選擇儀器到預約、取消的完整流程。
+測試用 [miniprogram-simulate](https://github.com/wechat-miniprogram/miniprogram-simulate) 和微信官方 WXML 編譯器渲染頁面，覆蓋：
+預約規則；登入、管理員密碼和鎖定；雲函數（包括同時預約、交易衝突重試）；Excel 檔案；週曆的點擊、拖動和自動捲動；
+以及首頁、登入、預約、確認、設置、預約管理各頁面的完整流程。
 
 ## 備註
 
 - 儀器名稱根據資產清單整理：「健恒電位儀 … Bipotentiostat CS2350M」寫作「雙恆電位儀」；3D 印表機的型號 Raise3D E2 取自照片；兩台相同的通風櫃、磁力攪拌器、超聲波清洗機以 1、2 區分。如有不準確，在 `instruments.js` 修改名稱即可（不要改 `id`）。
 - 英文實驗室名稱暫定為 Sustainable Building Materials Laboratory，可在 `i18n` 文件中修改。
+- 微信審核規定小程序不應在用戶體驗功能前強制登入；如審核時被要求修改，可改為先瀏覽週曆、預約時再登入。

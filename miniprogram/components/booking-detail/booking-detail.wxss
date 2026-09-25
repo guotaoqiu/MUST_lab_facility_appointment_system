@@ -79,6 +79,29 @@
   word-break: break-all;
 }
 
+.user {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.avatar {
+  width: 44rpx;
+  height: 44rpx;
+  margin-right: 12rpx;
+  border-radius: 50%;
+  background: var(--bg);
+}
+
+.nick {
+  margin-right: 16rpx;
+}
+
+.openid {
+  font-size: 22rpx;
+  color: var(--text-3);
+}
+
 .actions {
   display: flex;
   margin-top: 40rpx;

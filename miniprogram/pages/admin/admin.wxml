@@ -1,0 +1,49 @@
+<view class="page">
+  <picker range="{{names}}" value="{{index}}" bindchange="onPickInstrument">
+    <view class="instrument" hover-class="instrument-pressed">
+      <image class="thumb" src="{{current.photo}}" mode="aspectFill"></image>
+      <view class="instrument-text">
+        <text class="instrument-name">{{current.name}}</text>
+        <text class="instrument-meta">{{current.meta}}</text>
+      </view>
+      <view class="chevron-down"></view>
+    </view>
+  </picker>
+
+  <view class="card">
+    <view class="status-row">
+      <view class="status-text">
+        <text class="card-title">{{t.suspendSwitch}}</text>
+        <text wx:if="{{suspended}}" class="status status-off">{{suspendedText}}</text>
+        <text wx:else class="status status-on">{{t.accepting}}</text>
+      </view>
+      <switch checked="{{!!suspended}}" color="#d14343" disabled="{{busy}}" bindchange="onSuspendChange"></switch>
+    </view>
+    <text class="note">{{t.suspendNote}}</text>
+  </view>
+
+  <view class="card records">
+    <view class="records-head">
+      <text class="card-title">{{t.records}}</text>
+      <view class="month">
+        <view class="month-arrow month-prev" data-step="-1" bindtap="stepMonth" aria-role="button" aria-label="{{t.prevMonth}}"></view>
+        <picker mode="date" fields="month" value="{{month}}" bindchange="onPickMonth">
+          <text class="month-text">{{monthText}}</text>
+        </picker>
+        <view class="month-arrow month-next" data-step="1" bindtap="stepMonth" aria-role="button" aria-label="{{t.nextMonth}}"></view>
+      </view>
+    </view>
+    <text wx:if="{{summaryText}}" class="summary">{{summaryText}}</text>
+    <view wx:if="{{loading && !records.length}}" class="empty">{{t.loading}}</view>
+    <block wx:else>
+      <record-item class="record" wx:for="{{records}}" wx:key="id" item="{{item}}" t="{{t}}" bind:cancel="onCancel"></record-item>
+      <view wx:if="{{!records.length}}" class="empty">{{t.noRecords}}</view>
+    </block>
+  </view>
+</view>
+
+<view class="bar">
+  <view class="btn btn-primary bar-btn {{busy ? 'btn-disabled' : ''}}" hover-class="btn-pressed" bindtap="onExport" aria-role="button">
+    {{exporting ? t.exporting : t.exportExcel}}
+  </view>
+</view>

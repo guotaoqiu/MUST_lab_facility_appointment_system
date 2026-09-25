@@ -85,6 +85,42 @@
   color: var(--must-blue);
 }
 
+.top-action {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 72rpx;
+  height: 72rpx;
+  margin-left: 8rpx;
+  border-radius: 12rpx;
+}
+
+.top-action-pressed {
+  background: var(--bg);
+}
+
+.manage {
+  padding: 0 20rpx;
+  font-size: 26rpx;
+  font-weight: 600;
+  color: var(--must-gold-text);
+  background: var(--must-gold-soft);
+}
+
+.settings-icon {
+  width: 44rpx;
+  height: 44rpx;
+}
+
+.suspended {
+  padding: 16rpx 24rpx;
+  font-size: 26rpx;
+  font-weight: 600;
+  color: var(--danger);
+  background: #fdf0f0;
+}
+
 .notice {
   padding: 12rpx 24rpx;
   font-size: 22rpx;
@@ -274,6 +310,10 @@
   text-align: center;
   font-size: 24rpx;
   color: var(--text-3);
+}
+
+.bar-hint-suspended {
+  color: var(--danger);
 }
 
 .bar-info {

@@ -1,0 +1,121 @@
+.item {
+  padding: 28rpx 32rpx;
+  background: #fff;
+  border-bottom: 1rpx solid var(--line);
+}
+
+.item-cancelled .title,
+.item-cancelled .when,
+.item-cancelled .value {
+  color: var(--text-3);
+}
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  font-size: 30rpx;
+  line-height: 42rpx;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.tag {
+  flex: 0 0 auto;
+  margin-left: 16rpx;
+  padding: 2rpx 14rpx;
+  border-radius: 6rpx;
+  font-size: 22rpx;
+  line-height: 36rpx;
+}
+
+.tag-booked {
+  color: var(--must-blue);
+  background: var(--must-blue-soft);
+}
+
+.tag-completed {
+  color: var(--text-2);
+  background: var(--bg);
+}
+
+.tag-cancelled {
+  color: var(--danger);
+  background: #fdf0f0;
+}
+
+.when {
+  display: block;
+  margin: 4rpx 0 12rpx;
+  font-size: 28rpx;
+  color: var(--text);
+}
+
+.line {
+  display: flex;
+  margin-top: 8rpx;
+  font-size: 26rpx;
+  line-height: 38rpx;
+}
+
+.label {
+  flex: 0 0 140rpx;
+  color: var(--text-3);
+}
+
+.value {
+  flex: 1;
+  min-width: 0;
+  color: var(--text);
+  word-break: break-all;
+}
+
+.muted {
+  color: var(--text-2);
+}
+
+.user {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.avatar {
+  width: 40rpx;
+  height: 40rpx;
+  margin-right: 12rpx;
+  border-radius: 50%;
+  background: var(--bg);
+}
+
+.nick {
+  margin-right: 16rpx;
+}
+
+.openid {
+  font-size: 22rpx;
+  color: var(--text-3);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16rpx;
+}
+
+.cancel {
+  padding: 10rpx 28rpx;
+  border: 1rpx solid #efc4c4;
+  border-radius: 999rpx;
+  font-size: 26rpx;
+  color: var(--danger);
+}
+
+.cancel-pressed {
+  background: #fdf0f0;
+}

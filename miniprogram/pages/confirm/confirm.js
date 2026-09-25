@@ -1,12 +1,12 @@
-const core = require('../../utils/booking-core')
+const core = require('../../shared/booking-core')
 const i18n = require('../../utils/i18n')
 const clock = require('../../utils/clock')
 const service = require('../../services/booking')
-const instruments = require('../../data/instruments')
+const instruments = require('../../shared/instruments')
 
 const NAME_KEY = 'bookerName'
 // After these errors the chosen slot is no longer usable: go back and pick again.
-const RESELECT_CODES = ['CONFLICT', 'IN_PAST', 'OUT_OF_RANGE', 'INVALID_TIME', 'INVALID_DATE', 'BAD_INSTRUMENT']
+const RESELECT_CODES = ['CONFLICT', 'IN_PAST', 'OUT_OF_RANGE', 'INVALID_TIME', 'INVALID_DATE', 'BAD_INSTRUMENT', 'SUSPENDED']
 
 function refreshBookingPage() {
   const pages = typeof getCurrentPages === 'function' ? getCurrentPages() : []
@@ -145,7 +145,9 @@ Component({
         showCancel: false,
         confirmText: t.gotIt,
         success: () => {
-          if (goBack && !this.left) wx.navigateBack()
+          if (this.left) return
+          if (code === 'NOT_LOGGED_IN') wx.reLaunch({ url: '/pages/index/index?login=1' })
+          else if (goBack) wx.navigateBack()
         }
       })
     }

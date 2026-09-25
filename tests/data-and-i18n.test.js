@@ -8,7 +8,7 @@ const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8')
 useFixedNow()
 installWx()
 
-const instruments = require('../miniprogram/data/instruments')
+const instruments = require('../miniprogram/shared/instruments')
 const zh = require('../miniprogram/i18n/zh')
 const en = require('../miniprogram/i18n/en')
 const i18n = require('../miniprogram/utils/i18n')
@@ -32,12 +32,11 @@ describe('instrument data', () => {
 })
 
 describe('cloud function copies (npm run sync)', () => {
-  test('booking-core.js is identical in the mini program and the cloud function', () => {
-    expect(read('cloudfunctions/booking/booking-core.js')).toBe(read('miniprogram/utils/booking-core.js'))
-  })
-
-  test('instrument-ids.json matches the instrument list', () => {
-    expect(JSON.parse(read('cloudfunctions/booking/instrument-ids.json'))).toEqual(instruments.map((i) => i.id))
+  test('miniprogram/shared is copied unchanged into the cloud function', () => {
+    const files = fs.readdirSync(path.join(ROOT, 'miniprogram/shared')).sort()
+    expect(files).toEqual(['booking-core.js', 'instruments.js', 'xlsx.js'])
+    expect(fs.readdirSync(path.join(ROOT, 'cloudfunctions/booking/shared')).sort()).toEqual(files)
+    files.forEach((f) => expect(read('cloudfunctions/booking/shared/' + f)).toBe(read('miniprogram/shared/' + f)))
   })
 })
 
@@ -55,12 +54,12 @@ describe('translations', () => {
   })
 
   test('every error code the backend can return has a message', () => {
-    const sources = read('miniprogram/utils/booking-core.js') + read('miniprogram/services/booking.js') + read('cloudfunctions/booking/index.js')
+    const sources = read('miniprogram/shared/booking-core.js') + read('miniprogram/services/booking.js') + read('cloudfunctions/booking/index.js')
     const codes = new Set()
     const re = /(?:fail\(|error: |code: )'([A-Z_]+)'/g
     let m
     while ((m = re.exec(sources))) codes.add(m[1])
-    expect(codes.size).toBeGreaterThan(10)
+    expect(codes.size).toBeGreaterThan(25)
     codes.forEach((code) => {
       expect(zh.errors[code]).toBeTruthy()
       expect(en.errors[code]).toBeTruthy()
@@ -71,7 +70,7 @@ describe('translations', () => {
     // WeChat counts a CJK character as 2 and a Latin one as 1, limit 8.
     const width = (s) => Array.from(s).reduce((n, c) => n + (c.charCodeAt(0) > 0xff ? 2 : 1), 0)
     ;[zh, en].forEach((t) => {
-      ;[t.confirmCancel, t.keepBooking, t.gotIt].forEach((label) => expect(width(label)).toBeLessThanOrEqual(8))
+      ;[t.confirmCancel, t.keepBooking, t.gotIt, t.confirm, t.cancel].forEach((label) => expect(width(label)).toBeLessThanOrEqual(8))
     })
   })
 
@@ -84,6 +83,7 @@ describe('translations', () => {
       JSON.stringify(zh),
       JSON.stringify(instruments.map((i) => i.name.zh)),
       read('miniprogram/services/local-store.js'),
+      read('miniprogram/shared/booking-core.js'),
       read('miniprogram/pages/index/index.wxml')
     ].join('')
     const found = simplifiedOnly.filter((c) => texts.includes(c))
@@ -109,6 +109,8 @@ describe('formatting', () => {
     expect(i18n.errorMessage('NAME_TOO_LONG', 'zh')).toBe('姓名不能超過 30 個字')
     expect(i18n.errorMessage('PURPOSE_TOO_LONG', 'en')).toBe('Purpose must be at most 200 characters.')
     expect(i18n.errorMessage('SOMETHING_NEW', 'en')).toBe(en.errors.DEFAULT)
+    expect(i18n.errorMessage('INVALID_CREDENTIALS', 'zh', { attemptsLeft: 2 })).toBe('帳號或密碼錯誤，還可以嘗試 2 次')
+    expect(i18n.errorMessage('TOO_MANY_ATTEMPTS', 'en', { retryAfterMin: 15 })).toBe('Too many attempts. Please try again in 15 minutes.')
   })
 
   test('language follows the saved choice, then the WeChat language', () => {

@@ -1,0 +1,8 @@
+{
+  "navigationBarBackgroundColor": "#006cba",
+  "navigationBarTextStyle": "white",
+  "enablePullDownRefresh": true,
+  "usingComponents": {
+    "record-item": "/components/record-item/record-item"
+  }
+}

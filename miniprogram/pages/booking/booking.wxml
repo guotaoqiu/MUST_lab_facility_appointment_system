@@ -17,10 +17,14 @@
       </block>
       <text wx:else class="picker-placeholder">{{t.selectInstrument}}</text>
     </view>
-    <lang-switch id="lang" lang="{{lang}}" bind:change="onLangChange"></lang-switch>
+    <view wx:if="{{isAdmin}}" class="top-action manage" hover-class="top-action-pressed" bindtap="goAdmin" aria-role="button">{{t.manage}}</view>
+    <view class="top-action" hover-class="top-action-pressed" bindtap="goSettings" aria-role="button" aria-label="{{t.settings}}">
+      <image class="settings-icon" src="/images/icons/settings.png"></image>
+    </view>
   </view>
 
   <view wx:if="{{demo}}" class="notice">{{t.demoMode}}</view>
+  <view wx:if="{{suspendedText}}" class="suspended">{{suspendedText}}</view>
 
   <block wx:if="{{current}}">
     <view class="sticky">
@@ -63,7 +67,7 @@
       bookings="{{weekBookings}}"
       now-date="{{nowDate}}"
       now-minutes="{{nowMinutes}}"
-      disabled="{{!ready}}"
+      disabled="{{!ready || !!suspendedText}}"
       view-top="{{viewTop}}"
       view-bottom="{{viewBottom}}"
       bind:selectionchange="onSelectionChange"
@@ -86,7 +90,7 @@
         <view class="bar-clear" hover-class="bar-clear-pressed" bindtap="clearSelection" aria-role="button">{{t.clear}}</view>
         <view class="btn btn-primary bar-book" hover-class="btn-pressed" bindtap="goConfirm" aria-role="button">{{t.book}}</view>
       </block>
-      <text wx:else class="bar-hint">{{t.tapHint}}</text>
+      <text wx:else class="bar-hint {{suspendedText ? 'bar-hint-suspended' : ''}}">{{suspendedText || t.tapHint}}</text>
     </view>
   </block>
 

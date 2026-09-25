@@ -3,7 +3,6 @@
   "navigationBarTextStyle": "white",
   "enablePullDownRefresh": true,
   "usingComponents": {
-    "lang-switch": "/components/lang-switch/lang-switch",
     "week-calendar": "/components/week-calendar/week-calendar",
     "instrument-drawer": "/components/instrument-drawer/instrument-drawer",
     "booking-detail": "/components/booking-detail/booking-detail"

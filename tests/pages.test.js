@@ -11,10 +11,11 @@ const service = require('../miniprogram/services/booking')
 
 let w
 let pages = []
-beforeEach(() => {
+beforeEach(async () => {
   w = installWx()
   i18n.setLang('zh')
   pages = []
+  await service.login({ nickname: '小明' }) // signed in as a WeChat user (demo mode)
 })
 afterEach(() => pages.forEach((p) => p.instance.onUnload && p.instance.onUnload()))
 
@@ -132,16 +133,81 @@ describe('booking page', () => {
     expect(page.instance.data.detail).toBeNull()
   })
 
-  test('switching to English relabels everything', async () => {
+  test('in English everything is relabelled (the switch lives in Settings)', async () => {
     const page = await openBooking()
     await pick(page, 'thermal-imager')
-    page.querySelector('#lang').querySelectorAll('.opt')[1].dispatchEvent('tap')
+    i18n.setLang('en')
+    page.instance.onShow() // back from Settings
     await flush()
     expect(text(page)).toContain('Infrared Thermal Imager')
     expect(text(page)).toContain('This Week')
     expect(text(page)).toContain('21 – 27 Sep')
     expect(page.instance.data.days[0].weekday).toBe('Mon')
     expect(w.titles[w.titles.length - 1]).toBe('Instrument Booking')
+  })
+
+  test('without signing in the booking system sends you to the sign-in choice', async () => {
+    await service.logout()
+    const page = render('pages/booking/booking')
+    page.instance.onLoad({})
+    page.instance.onShow()
+    page.instance.onReady()
+    await flush()
+    expect(w.reLaunch).toEqual(['/pages/index/index?login=1'])
+    expect(page.instance.data.drawerOpen).toBe(false)
+  })
+
+  test('the gear opens Settings; only administrators get the Manage button', async () => {
+    const page = await openBooking()
+    expect(page.querySelector('.manage')).toBeUndefined()
+    page.querySelector('.top-action').dispatchEvent('tap')
+    await flush()
+    expect(w.navigateTo).toEqual(['/pages/settings/settings'])
+
+    await service.adminLogin(service.demoAdmin.account, service.demoAdmin.password)
+    const admin = await openBooking()
+    await pick(admin, 'thermal-imager')
+    admin.querySelector('.manage').dispatchEvent('tap')
+    await flush()
+    expect(w.navigateTo[1]).toBe('/pages/admin/admin?id=thermal-imager')
+  })
+
+  test('administrators see which WeChat user made a booking', async () => {
+    await service.adminLogin(service.demoAdmin.account, service.demoAdmin.password)
+    const page = await openBooking()
+    await pick(page, 'thermal-imager')
+    calendar(page).querySelectorAll('.block')[1].dispatchEvent('tap')
+    await flush()
+    const sheet = page.querySelector('#detail')
+    expect(text(sheet)).toContain('微信用戶')
+    expect(text(sheet)).toContain('Li Wei')
+    expect(text(sheet)).toContain('預約於')
+    expect(sheet.querySelector('.btn-danger')).toBeUndefined() // it has already ended
+
+    page.instance.closeDetail()
+    page.querySelectorAll('.week')[1].dispatchEvent('tap')
+    await flush()
+    calendar(page).querySelectorAll('.block')[0].dispatchEvent('tap')
+    await flush()
+    expect(text(sheet)).toContain('黃嘉欣')
+    expect(sheet.querySelector('.btn-danger')).toBeTruthy() // admins may cancel anyone's upcoming booking
+  })
+
+  test('a suspended instrument shows why and cannot be booked', async () => {
+    await service.adminLogin(service.demoAdmin.account, service.demoAdmin.password)
+    await service.setSuspended('centrifuge', true, '維修中')
+    await service.logout()
+    await service.login()
+    const page = await openBooking()
+    await pick(page, 'centrifuge')
+    expect(text(page)).toContain('此儀器暫停預約：維修中')
+    expect(calendar(page).instance.data.disabled).toBe(true)
+    await tapCell(page, 5, 600)
+    expect(page.instance.data.selection).toBeNull()
+    page.instance.openDrawer()
+    await flush()
+    const item = drawer(page).querySelectorAll('.item').find((i) => i.dom.dataset.id === 'centrifuge')
+    expect(text(item)).toContain('暫停預約')
   })
 
   test('the grid stays disabled until the bookings have loaded', async () => {
@@ -321,6 +387,19 @@ describe('confirm page', () => {
     expect(w.modals[0].content).toBe('該時段剛被其他人預約，請重新選擇')
     expect(w.navigateBack).toBe(1)
     expect(page.instance.data.submitting).toBe(false)
+  })
+
+  test('an instrument suspended in the meantime sends the user back', async () => {
+    const page = await openConfirm(query)
+    await service.adminLogin(service.demoAdmin.account, service.demoAdmin.password)
+    await service.setSuspended('thermal-imager', true, '')
+    await service.logout()
+    await service.login()
+    page.instance.onNameInput({ detail: { value: '陳大文' } })
+    page.instance.onPurposeInput({ detail: { value: '測試' } })
+    await page.instance.submit()
+    expect(w.modals[0].content).toBe('此儀器暫停預約')
+    expect(w.navigateBack).toBe(1)
   })
 
   test('a broken link shows an error and goes back', async () => {

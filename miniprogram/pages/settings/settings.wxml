@@ -1,0 +1,56 @@
+<view class="page">
+  <view class="profile">
+    <image class="avatar" src="{{profile.avatar || '/images/icons/avatar.png'}}" mode="aspectFill"></image>
+    <view class="profile-text">
+      <text class="profile-name">{{profile.name}}</text>
+      <text class="role role-{{profile.role}}">{{profile.roleText}}</text>
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-head">
+      <text class="section-title">{{t.myBookings}}</text>
+    </view>
+    <view class="tabs">
+      <view class="tab {{tab === 'upcoming' ? 'tab-on' : ''}}" data-tab="upcoming" bindtap="switchTab" aria-role="tab">
+        {{t.upcoming}}<text wx:if="{{upcoming.length}}" class="count">{{upcoming.length}}</text>
+      </view>
+      <view class="tab {{tab === 'history' ? 'tab-on' : ''}}" data-tab="history" bindtap="switchTab" aria-role="tab">{{t.history}}</view>
+    </view>
+    <view wx:if="{{loading && !loaded}}" class="empty">{{t.loading}}</view>
+    <block wx:else>
+      <record-item
+        class="record"
+        wx:for="{{items}}"
+        wx:key="id"
+        item="{{item}}"
+        t="{{t}}"
+        bind:cancel="onCancel"
+      ></record-item>
+      <view wx:if="{{!items.length}}" class="empty">
+        {{tab === 'upcoming' ? t.noUpcoming : t.noHistory}}
+      </view>
+    </block>
+  </view>
+
+  <view class="section menu">
+    <view class="row">
+      <text class="row-title">{{t.language}}</text>
+      <lang-switch id="lang" lang="{{lang}}" bind:change="onLangChange"></lang-switch>
+    </view>
+    <view wx:if="{{profile.role === 'admin'}}" class="row" hover-class="row-pressed" bindtap="goAdmin" aria-role="button">
+      <view class="row-text">
+        <text class="row-title">{{t.adminPanel}}</text>
+        <text class="row-desc">{{t.adminPanelDesc}}</text>
+      </view>
+      <view class="chevron"></view>
+    </view>
+    <view wx:else class="row" hover-class="row-pressed" bindtap="goAdminLogin" aria-role="button">
+      <text class="row-title">{{t.adminLogin}}</text>
+      <view class="chevron"></view>
+    </view>
+    <view class="row" hover-class="row-pressed" bindtap="onLogout" aria-role="button">
+      <text class="row-title danger">{{t.logout}}</text>
+    </view>
+  </view>
+</view>
