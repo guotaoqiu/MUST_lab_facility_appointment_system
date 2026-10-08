@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- MUST blue background (WeChat crops the avatar to a circle) -->
+  <rect width="1024" height="1024" fill="#006cba"/>
+  <!-- calendar page -->
+  <rect x="232" y="272" width="560" height="520" rx="72" fill="#ffffff"/>
+  <path d="M232 392V344Q232 272 304 272H720Q792 272 792 344V392Z" fill="#ffe409"/>
+  <rect x="348" y="228" width="60" height="104" rx="30" fill="#00579a"/>
+  <rect x="616" y="228" width="60" height="104" rx="30" fill="#00579a"/>
+  <!-- flask -->
+  <rect x="466" y="424" width="92" height="36" rx="18" fill="#006cba"/>
+  <path d="M484 452H540V548L640 702Q662 744 614 744H410Q362 744 384 702L484 548Z" fill="#006cba"/>
+  <path d="M450 640H574L613 700Q626 720 602 720H422Q398 720 411 700Z" fill="#ffe409"/>
+</svg>
