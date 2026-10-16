@@ -1,7 +1,7 @@
 {
   "description": "MUST Sustainable Building Materials Laboratory — instrument booking mini program",
   "projectname": "must-lab-booking",
-  "appid": "touristappid",
+  "appid": "wx7f76dac76cfccc01",
   "compileType": "miniprogram",
   "miniprogramRoot": "miniprogram/",
   "cloudfunctionRoot": "cloudfunctions/",
